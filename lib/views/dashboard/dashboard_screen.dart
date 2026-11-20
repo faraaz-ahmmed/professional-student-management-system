@@ -1,9 +1,11 @@
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../auth/login_screen.dart';
 import '../students/student_management_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../courses/courses_screen.dart';
+import '../reports/reports_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -31,276 +33,380 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Icons.bar_chart_outlined,
   ];
 
+  final List<Widget> pages = const [
+    SizedBox.shrink(),
+    StudentManagementScreen(),
+    AttendanceScreen(),
+    CoursesScreen(),
+    ReportsScreen(),
+  ];
+
   void selectPage(int index) {
     setState(() => selectedIndex = index);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          selectedIndex == 0 ? 'PSMS Dashboard' : titles[selectedIndex],
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth >= 900;
 
-      drawer: Drawer(
-        child: SafeArea(
-          child: Column(
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                color: AppTheme.navy,
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        return Scaffold(
+          appBar: !isDesktop && selectedIndex == 0
+              ? AppBar(
+                  title: const Text(
+                    'PSMS Dashboard',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  actions: [
+                    IconButton(
+                      onPressed: () {},
+                      icon: const Icon(Icons.notifications_none_rounded),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                )
+              : null,
+
+          drawer: !isDesktop && selectedIndex == 0
+              ? _buildDrawer()
+              : null,
+
+          body: isDesktop
+              ? Row(
                   children: [
-                    CircleAvatar(
-                      radius: 32,
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        Icons.person,
-                        size: 38,
-                        color: AppTheme.navy,
-                      ),
+                    _buildSidebar(),
+                    Expanded(child: _buildPages()),
+                  ],
+                )
+              : _buildPages(),
+
+          bottomNavigationBar: isDesktop
+              ? null
+              : NavigationBar(
+                  selectedIndex: selectedIndex < 4 ? selectedIndex : 0,
+                  onDestinationSelected: selectPage,
+                  destinations: const [
+                    NavigationDestination(
+                      icon: Icon(Icons.dashboard_outlined),
+                      selectedIcon: Icon(Icons.dashboard),
+                      label: 'Home',
                     ),
-                    SizedBox(height: 12),
-                    Text(
-                      'PSMS Admin',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                      ),
+                    NavigationDestination(
+                      icon: Icon(Icons.people_outline),
+                      selectedIcon: Icon(Icons.people),
+                      label: 'Students',
                     ),
-                    Text(
-                      'Administrator',
-                      style: TextStyle(color: Colors.white70),
+                    NavigationDestination(
+                      icon: Icon(Icons.fact_check_outlined),
+                      selectedIcon: Icon(Icons.fact_check),
+                      label: 'Attendance',
+                    ),
+                    NavigationDestination(
+                      icon: Icon(Icons.menu_book_outlined),
+                      selectedIcon: Icon(Icons.menu_book),
+                      label: 'Courses',
                     ),
                   ],
                 ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPages() {
+    return IndexedStack(
+      index: selectedIndex,
+      children: [
+        _buildDashboard(),
+        ...pages.skip(1),
+      ],
+    );
+  }
+
+  Widget _buildSidebar() {
+    return Container(
+      width: 240,
+      color: AppTheme.navy,
+      child: SafeArea(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.school_rounded,
+                    color: AppTheme.primary,
+                    size: 42,
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'PSMS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 25,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Admin Panel',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
               ),
+            ),
+            const Divider(color: Colors.white24),
 
-              for (int i = 0; i < titles.length; i++)
-                ListTile(
-                  leading: Icon(icons[i]),
-                  title: Text(titles[i]),
-                  selected: selectedIndex == i,
-                  selectedColor: AppTheme.navy,
-                  onTap: () {
-                    selectPage(i);
-                    Navigator.pop(context);
-                  },
-                ),
+            for (int i = 0; i < titles.length; i++)
+              _navigationItem(i),
 
-              const Spacer(),
-              const Divider(),
-
-              const ListTile(
-                leading: Icon(Icons.settings_outlined),
-                title: Text('Settings'),
+            const Spacer(),
+            const Divider(color: Colors.white24),
+            ListTile(
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: Colors.white70,
               ),
-
-              ListTile(
-                leading: const Icon(Icons.logout_rounded),
-                title: const Text('Logout'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/',
-                    (route) => false,
-                  );
-                },
+              title: const Text(
+                'Logout',
+                style: TextStyle(color: Colors.white),
               ),
-            ],
-          ),
+              onTap: _logout,
+            ),
+            const SizedBox(height: 12),
+          ],
         ),
       ),
+    );
+  }
 
-      body: IndexedStack(
-        index: selectedIndex,
-        children: [
-          _buildDashboard(),
-          const StudentManagementScreen(),
-          const AttendanceScreen(),
-          const CoursesScreen(),
-          _buildPlaceholder('Reports'),
-        ],
-      ),
+  Widget _navigationItem(int index) {
+    final isSelected = selectedIndex == index;
 
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex < 4 ? selectedIndex : 0,
-        onDestinationSelected: selectPage,
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Home',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
-            label: 'Students',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check),
-            label: 'Attendance',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
-            label: 'Courses',
-          ),
-        ],
+    return ListTile(
+      selected: isSelected,
+      selectedTileColor: Colors.white.withValues(alpha: 0.12),
+      leading: Icon(
+        icons[index],
+        color: isSelected ? AppTheme.primary : Colors.white70,
       ),
+      title: Text(
+        titles[index],
+        style: TextStyle(
+          color: isSelected ? AppTheme.primary : Colors.white,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+      ),
+      onTap: () => selectPage(index),
+    );
+  }
+
+  Widget _buildDrawer() {
+    return Drawer(
+      child: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(24),
+              color: AppTheme.navy,
+              child: const Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.white,
+                    child: Icon(
+                      Icons.person,
+                      size: 36,
+                      color: AppTheme.navy,
+                    ),
+                  ),
+                  SizedBox(height: 12),
+                  Text(
+                    'PSMS Admin',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'Administrator',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ],
+              ),
+            ),
+            for (int i = 0; i < titles.length; i++)
+              ListTile(
+                leading: Icon(icons[i]),
+                title: Text(titles[i]),
+                selected: selectedIndex == i,
+                onTap: () {
+                  selectPage(i);
+                  Navigator.pop(context);
+                },
+              ),
+            const Spacer(),
+            ListTile(
+              leading: const Icon(Icons.logout_rounded),
+              title: const Text('Logout'),
+              onTap: _logout,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _logout() {
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
     );
   }
 
   Widget _buildDashboard() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Welcome Back, Admin! 👋',
-            style: TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.navy,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        final isDesktop = width >= 900;
+        final columns = isDesktop ? 4 : width >= 600 ? 2 : 1;
+
+        return SingleChildScrollView(
+          padding: EdgeInsets.all(width < 600 ? 16 : 24),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1200),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Welcome Back, Admin! 👋',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Here is your institution overview.',
+                    style: TextStyle(color: Colors.black54),
+                  ),
+                  const SizedBox(height: 24),
+
+                  GridView.count(
+                    crossAxisCount: columns,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
+                    childAspectRatio: isDesktop ? 1.5 : 1.7,
+                    children: const [
+                      _StatCard(
+                        title: 'Total Students',
+                        value: '250',
+                        icon: Icons.people_alt_outlined,
+                        color: Color(0xFF2563EB),
+                      ),
+                      _StatCard(
+                        title: 'Teachers',
+                        value: '18',
+                        icon: Icons.person_outline,
+                        color: Color(0xFF16A34A),
+                      ),
+                      _StatCard(
+                        title: 'Courses',
+                        value: '12',
+                        icon: Icons.menu_book_outlined,
+                        color: Color(0xFF9333EA),
+                      ),
+                      _StatCard(
+                        title: 'Attendance',
+                        value: '92%',
+                        icon: Icons.fact_check_outlined,
+                        color: Color(0xFFEA8A08),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Quick Actions',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      _ActionCard(
+                        icon: Icons.person_add_alt_1,
+                        title: 'Students',
+                        onTap: () => selectPage(1),
+                      ),
+                      _ActionCard(
+                        icon: Icons.fact_check_outlined,
+                        title: 'Attendance',
+                        onTap: () => selectPage(2),
+                      ),
+                      _ActionCard(
+                        icon: Icons.menu_book_outlined,
+                        title: 'Courses',
+                        onTap: () => selectPage(3),
+                      ),
+                      _ActionCard(
+                        icon: Icons.bar_chart_outlined,
+                        title: 'Reports',
+                        onTap: () => selectPage(4),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Recent Students',
+                    style: TextStyle(
+                      fontSize: 19,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.navy,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  const _StudentTile(
+                    name: 'Ali Ahmad',
+                    rollNo: 'PSMS-001',
+                    initials: 'AA',
+                  ),
+                  const _StudentTile(
+                    name: 'Ahmed Khan',
+                    rollNo: 'PSMS-002',
+                    initials: 'AK',
+                  ),
+                  const _StudentTile(
+                    name: 'Sara Malik',
+                    rollNo: 'PSMS-003',
+                    initials: 'SM',
+                  ),
+                  const SizedBox(height: 20),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 6),
-          const Text(
-            'Here is your institution overview.',
-            style: TextStyle(color: Colors.black54),
-          ),
-
-          const SizedBox(height: 24),
-
-          GridView.count(
-            crossAxisCount: 2,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 14,
-            mainAxisSpacing: 14,
-            childAspectRatio: 1.35,
-            children: const [
-              _StatCard(
-                title: 'Total Students',
-                value: '250',
-                icon: Icons.people_alt_outlined,
-                color: Color(0xFF2563EB),
-              ),
-              _StatCard(
-                title: 'Teachers',
-                value: '18',
-                icon: Icons.person_outline,
-                color: Color(0xFF16A34A),
-              ),
-              _StatCard(
-                title: 'Courses',
-                value: '12',
-                icon: Icons.menu_book_outlined,
-                color: Color(0xFF9333EA),
-              ),
-              _StatCard(
-                title: 'Attendance',
-                value: '92%',
-                icon: Icons.fact_check_outlined,
-                color: Color(0xFFEA8A08),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          const Text(
-            'Quick Actions',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.navy,
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          Row(
-            children: [
-              Expanded(
-                child: _ActionCard(
-                  icon: Icons.person_add_alt_1,
-                  title: 'Add Student',
-                  onTap: () => selectPage(1),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _ActionCard(
-                  icon: Icons.fact_check_outlined,
-                  title: 'Attendance',
-                  onTap: () => selectPage(2),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 28),
-
-          const Text(
-            'Recent Students',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.navy,
-            ),
-          ),
-
-          const SizedBox(height: 12),
-
-          const _StudentTile(
-            name: 'Ali Ahmad',
-            rollNo: 'PSMS-001',
-            initials: 'AA',
-          ),
-          const _StudentTile(
-            name: 'Ahmed Khan',
-            rollNo: 'PSMS-002',
-            initials: 'AK',
-          ),
-          const _StudentTile(
-            name: 'Sara Malik',
-            rollNo: 'PSMS-003',
-            initials: 'SM',
-          ),
-
-          const SizedBox(height: 20),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder(String title) {
-    return Center(
-      child: Text(
-        '$title Screen Coming Soon',
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: AppTheme.navy,
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -365,28 +471,34 @@ class _ActionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: AppTheme.primary, size: 30),
-            const SizedBox(height: 9),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: AppTheme.navy,
+    return SizedBox(
+      width: 145,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            vertical: 18,
+            horizontal: 12,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: AppTheme.primary, size: 29),
+              const SizedBox(height: 9),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: AppTheme.navy,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
