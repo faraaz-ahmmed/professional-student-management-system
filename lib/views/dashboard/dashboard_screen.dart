@@ -6,6 +6,7 @@ import '../students/student_management_screen.dart';
 import '../attendance/attendance_screen.dart';
 import '../courses/courses_screen.dart';
 import '../reports/reports_screen.dart';
+import '../notifications/notifications_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -23,6 +24,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'Attendance',
     'Courses',
     'Reports',
+    'Notifications',
   ];
 
   final List<IconData> icons = [
@@ -31,14 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Icons.fact_check_outlined,
     Icons.menu_book_outlined,
     Icons.bar_chart_outlined,
-  ];
-
-  final List<Widget> pages = const [
-    SizedBox.shrink(),
-    StudentManagementScreen(),
-    AttendanceScreen(),
-    CoursesScreen(),
-    ReportsScreen(),
+    Icons.notifications_none,
   ];
 
   void selectPage(int index) {
@@ -60,18 +55,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                   actions: [
                     IconButton(
-                      onPressed: () {},
+                      onPressed: () => selectPage(5),
                       icon: const Icon(Icons.notifications_none_rounded),
                     ),
                     const SizedBox(width: 8),
                   ],
                 )
               : null,
-
           drawer: !isDesktop && selectedIndex == 0
               ? _buildDrawer()
               : null,
-
           body: isDesktop
               ? Row(
                   children: [
@@ -80,7 +73,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 )
               : _buildPages(),
-
           bottomNavigationBar: isDesktop
               ? null
               : NavigationBar(
@@ -117,9 +109,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildPages() {
     return IndexedStack(
       index: selectedIndex,
-      children: [
-        _buildDashboard(),
-        ...pages.skip(1),
+      children: const [
+        _DashboardHome(),
+        StudentManagementScreen(),
+        AttendanceScreen(),
+        CoursesScreen(),
+        ReportsScreen(),
+        NotificationsScreen(),
       ],
     );
   }
@@ -159,10 +155,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const Divider(color: Colors.white24),
-
             for (int i = 0; i < titles.length; i++)
               _navigationItem(i),
-
             const Spacer(),
             const Divider(color: Colors.white24),
             ListTile(
@@ -270,8 +264,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
       (route) => false,
     );
   }
+}
 
-  Widget _buildDashboard() {
+class _DashboardHome extends StatelessWidget {
+  const _DashboardHome();
+
+  @override
+  Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -300,7 +299,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 24),
-
                   GridView.count(
                     crossAxisCount: columns,
                     shrinkWrap: true,
@@ -335,7 +333,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 28),
                   const Text(
                     'Quick Actions',
@@ -346,7 +343,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
                   Wrap(
                     spacing: 12,
                     runSpacing: 12,
@@ -354,26 +350,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       _ActionCard(
                         icon: Icons.person_add_alt_1,
                         title: 'Students',
-                        onTap: () => selectPage(1),
+                        onTap: () => _openPage(context, 1),
                       ),
                       _ActionCard(
                         icon: Icons.fact_check_outlined,
                         title: 'Attendance',
-                        onTap: () => selectPage(2),
+                        onTap: () => _openPage(context, 2),
                       ),
                       _ActionCard(
                         icon: Icons.menu_book_outlined,
                         title: 'Courses',
-                        onTap: () => selectPage(3),
+                        onTap: () => _openPage(context, 3),
                       ),
                       _ActionCard(
                         icon: Icons.bar_chart_outlined,
                         title: 'Reports',
-                        onTap: () => selectPage(4),
+                        onTap: () => _openPage(context, 4),
+                      ),
+                      _ActionCard(
+                        icon: Icons.notifications_none,
+                        title: 'Notifications',
+                        onTap: () => _openPage(context, 5),
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 28),
                   const Text(
                     'Recent Students',
@@ -384,7 +384,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-
                   const _StudentTile(
                     name: 'Ali Ahmad',
                     rollNo: 'PSMS-001',
@@ -408,6 +407,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       },
     );
+  }
+
+  void _openPage(BuildContext context, int index) {
+    final dashboardState =
+        context.findAncestorStateOfType<_DashboardScreenState>();
+    dashboardState?.selectPage(index);
   }
 }
 
