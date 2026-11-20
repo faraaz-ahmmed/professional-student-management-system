@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/notification_badge.dart';
 
 class AppNotification {
   final String title;
@@ -61,11 +62,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     ),
   ];
 
-  int get unreadCount =>
-      notifications.where((notification) => !notification.isRead).length;
-
   void markAsRead(AppNotification notification) {
+    if (notification.isRead) return;
+
     setState(() => notification.isRead = true);
+    NotificationBadge.decrease();
   }
 
   void markAllAsRead() {
@@ -74,14 +75,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         notification.isRead = true;
       }
     });
+
+    NotificationBadge.clear();
   }
 
   void deleteNotification(int index) {
+    final notification = notifications[index];
+
+    if (!notification.isRead) {
+      NotificationBadge.decrease();
+    }
+
     setState(() => notifications.removeAt(index));
   }
 
   void clearAll() {
     setState(() => notifications.clear());
+    NotificationBadge.clear();
   }
 
   @override
@@ -93,7 +103,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          if (unreadCount > 0)
+          if (NotificationBadge.unreadCount.value > 0)
             TextButton(
               onPressed: markAllAsRead,
               child: const Text(
@@ -116,54 +126,59 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(18),
-                      decoration: BoxDecoration(
-                        color: AppTheme.navy,
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.notifications_active_outlined,
-                            color: AppTheme.primary,
-                            size: 32,
+                    ValueListenableBuilder<int>(
+                      valueListenable: NotificationBadge.unreadCount,
+                      builder: (context, count, child) {
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(18),
+                          decoration: BoxDecoration(
+                            color: AppTheme.navy,
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'Your Notifications',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '$unreadCount unread notifications',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (notifications.isNotEmpty)
-                            IconButton(
-                              onPressed: clearAll,
-                              tooltip: 'Clear all',
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.white,
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.notifications_active_outlined,
+                                color: AppTheme.primary,
+                                size: 32,
                               ),
-                            ),
-                        ],
-                      ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Your Notifications',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '$count unread notifications',
+                                      style: const TextStyle(
+                                        color: Colors.white70,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (notifications.isNotEmpty)
+                                IconButton(
+                                  onPressed: clearAll,
+                                  tooltip: 'Clear all',
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        );
+                      },
                     ),
                     const SizedBox(height: 22),
                     const Text(

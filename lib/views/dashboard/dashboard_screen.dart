@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/notification_badge.dart';
 import '../auth/login_screen.dart';
 import '../students/student_management_screen.dart';
 import '../attendance/attendance_screen.dart';
@@ -54,17 +55,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   actions: [
-                    IconButton(
-                      onPressed: () => selectPage(5),
-                      icon: const Icon(Icons.notifications_none_rounded),
-                    ),
+                    _notificationButton(),
                     const SizedBox(width: 8),
                   ],
                 )
               : null,
-          drawer: !isDesktop && selectedIndex == 0
-              ? _buildDrawer()
-              : null,
+          drawer: !isDesktop && selectedIndex == 0 ? _buildDrawer() : null,
           body: isDesktop
               ? Row(
                   children: [
@@ -106,16 +102,62 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _notificationButton() {
+    return ValueListenableBuilder<int>(
+      valueListenable: NotificationBadge.unreadCount,
+      builder: (context, count, child) {
+        return IconButton(
+          tooltip: 'Notifications',
+          onPressed: () => selectPage(5),
+          icon: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Icon(Icons.notifications_none_rounded, size: 27),
+              if (count > 0)
+                Positioned(
+                  right: -7,
+                  top: -6,
+                  child: Container(
+                    constraints: const BoxConstraints(
+                      minWidth: 19,
+                      minHeight: 19,
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 5,
+                      vertical: 2,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      count > 99 ? '99+' : '$count',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPages() {
     return IndexedStack(
       index: selectedIndex,
-      children: const [
-        _DashboardHome(),
-        StudentManagementScreen(),
-        AttendanceScreen(),
-        CoursesScreen(),
-        ReportsScreen(),
-        NotificationsScreen(),
+      children: [
+        _DashboardHome(onNavigate: selectPage),
+        const StudentManagementScreen(),
+        const AttendanceScreen(),
+        const CoursesScreen(),
+        const ReportsScreen(),
+        const NotificationsScreen(),
       ],
     );
   }
@@ -156,7 +198,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const Divider(color: Colors.white24),
             for (int i = 0; i < titles.length; i++)
-              _navigationItem(i),
+              ListTile(
+                selected: selectedIndex == i,
+                selectedTileColor: Colors.white.withValues(alpha: 0.12),
+                leading: Icon(
+                  icons[i],
+                  color: selectedIndex == i
+                      ? AppTheme.primary
+                      : Colors.white70,
+                ),
+                title: Text(
+                  titles[i],
+                  style: TextStyle(
+                    color: selectedIndex == i
+                        ? AppTheme.primary
+                        : Colors.white,
+                    fontWeight: selectedIndex == i
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                ),
+                onTap: () => selectPage(i),
+              ),
             const Spacer(),
             const Divider(color: Colors.white24),
             ListTile(
@@ -174,27 +237,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
-    );
-  }
-
-  Widget _navigationItem(int index) {
-    final isSelected = selectedIndex == index;
-
-    return ListTile(
-      selected: isSelected,
-      selectedTileColor: Colors.white.withValues(alpha: 0.12),
-      leading: Icon(
-        icons[index],
-        color: isSelected ? AppTheme.primary : Colors.white70,
-      ),
-      title: Text(
-        titles[index],
-        style: TextStyle(
-          color: isSelected ? AppTheme.primary : Colors.white,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-      ),
-      onTap: () => selectPage(index),
     );
   }
 
@@ -267,7 +309,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 }
 
 class _DashboardHome extends StatelessWidget {
-  const _DashboardHome();
+  final ValueChanged<int> onNavigate;
+
+  const _DashboardHome({required this.onNavigate});
 
   @override
   Widget build(BuildContext context) {
@@ -348,29 +392,29 @@ class _DashboardHome extends StatelessWidget {
                     runSpacing: 12,
                     children: [
                       _ActionCard(
-                        icon: Icons.person_add_alt_1,
+                        icon: Icons.people_outline,
                         title: 'Students',
-                        onTap: () => _openPage(context, 1),
+                        onTap: () => onNavigate(1),
                       ),
                       _ActionCard(
                         icon: Icons.fact_check_outlined,
                         title: 'Attendance',
-                        onTap: () => _openPage(context, 2),
+                        onTap: () => onNavigate(2),
                       ),
                       _ActionCard(
                         icon: Icons.menu_book_outlined,
                         title: 'Courses',
-                        onTap: () => _openPage(context, 3),
+                        onTap: () => onNavigate(3),
                       ),
                       _ActionCard(
                         icon: Icons.bar_chart_outlined,
                         title: 'Reports',
-                        onTap: () => _openPage(context, 4),
+                        onTap: () => onNavigate(4),
                       ),
                       _ActionCard(
                         icon: Icons.notifications_none,
                         title: 'Notifications',
-                        onTap: () => _openPage(context, 5),
+                        onTap: () => onNavigate(5),
                       ),
                     ],
                   ),
@@ -399,7 +443,6 @@ class _DashboardHome extends StatelessWidget {
                     rollNo: 'PSMS-003',
                     initials: 'SM',
                   ),
-                  const SizedBox(height: 20),
                 ],
               ),
             ),
@@ -407,12 +450,6 @@ class _DashboardHome extends StatelessWidget {
         );
       },
     );
-  }
-
-  void _openPage(BuildContext context, int index) {
-    final dashboardState =
-        context.findAncestorStateOfType<_DashboardScreenState>();
-    dashboardState?.selectPage(index);
   }
 }
 
