@@ -1,9 +1,17 @@
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../dashboard/dashboard_screen.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  bool obscurePassword = true;
 
   @override
   Widget build(BuildContext context) {
@@ -18,7 +26,7 @@ class LoginScreen extends StatelessWidget {
               const Center(
                 child: Icon(
                   Icons.school_rounded,
-                  size: 65,
+                  size: 70,
                   color: AppTheme.primary,
                 ),
               ),
@@ -37,7 +45,6 @@ class LoginScreen extends StatelessWidget {
                 style: TextStyle(color: Colors.black54),
               ),
               const SizedBox(height: 35),
-
               const Text(
                 'Email Address',
                 style: TextStyle(
@@ -56,7 +63,6 @@ class LoginScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 22),
               const Text(
                 'Password',
@@ -67,16 +73,24 @@ class LoginScreen extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               TextField(
-                obscureText: true,
+                obscureText: obscurePassword,
                 decoration: InputDecoration(
                   hintText: 'Enter your password',
                   prefixIcon: const Icon(Icons.lock_outline),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  suffixIcon: IconButton(
+                    onPressed: () {
+                      setState(() {
+                        obscurePassword = !obscurePassword;
+                      });
+                    },
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                    ),
                   ),
                 ),
               ),
-
               const SizedBox(height: 12),
               Align(
                 alignment: Alignment.centerRight,
@@ -88,13 +102,19 @@ class LoginScreen extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(height: 25),
               SizedBox(
                 width: double.infinity,
                 height: 55,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const DashboardScreen(),
+                      ),
+                    );
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: AppTheme.navy,
