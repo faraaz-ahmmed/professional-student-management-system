@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../students/student_management_screen.dart';
+import '../attendance/attendance_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,7 +14,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int selectedIndex = 0;
 
-  final List<String> titles = [
+  final titles = [
     'Dashboard',
     'Students',
     'Attendance',
@@ -21,17 +22,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'Reports',
   ];
 
-  final List<IconData> drawerIcons = [
+  final icons = [
     Icons.dashboard_outlined,
     Icons.people_outline,
     Icons.fact_check_outlined,
     Icons.menu_book_outlined,
     Icons.bar_chart_outlined,
   ];
-
-  void selectPage(int index) {
-    setState(() => selectedIndex = index);
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -45,13 +42,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               actions: [
                 IconButton(
                   onPressed: () {},
-                  icon: const Icon(Icons.notifications_none_rounded),
+                  icon: const Icon(Icons.notifications_none),
                 ),
-                const SizedBox(width: 8),
               ],
             )
-          : null,
-
+          : AppBar(
+              title: Text(
+                titles[selectedIndex],
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -88,82 +88,72 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-
               for (int i = 0; i < titles.length; i++)
                 ListTile(
-                  leading: Icon(drawerIcons[i]),
+                  leading: Icon(icons[i]),
                   title: Text(titles[i]),
                   selected: selectedIndex == i,
                   onTap: () {
-                    selectPage(i);
+                    setState(() => selectedIndex = i);
                     Navigator.pop(context);
                   },
                 ),
-
               const Spacer(),
               const Divider(),
-
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: const Text('Settings'),
-                onTap: () {
-                  Navigator.pop(context);
-                },
-              ),
-
-              ListTile(
-                leading: const Icon(Icons.logout_rounded),
-                title: const Text('Logout'),
-                onTap: () {
-                  Navigator.pop(context);
-                  Navigator.pushNamedAndRemoveUntil(
-                    context,
-                    '/',
-                    (route) => false,
-                  );
-                },
+              const ListTile(
+                leading: Icon(Icons.settings_outlined),
+                title: Text('Settings'),
               ),
             ],
           ),
         ),
       ),
-
       body: IndexedStack(
         index: selectedIndex,
         children: [
           _buildDashboard(),
           const StudentManagementScreen(),
-          _buildPlaceholder('Attendance'),
-          _buildPlaceholder('Courses'),
-          _buildPlaceholder('Reports'),
+          const AttendanceScreen(),
+          _placeholder('Courses'),
+          _placeholder('Reports'),
         ],
       ),
-
       bottomNavigationBar: NavigationBar(
         selectedIndex: selectedIndex < 4 ? selectedIndex : 0,
-        onDestinationSelected: selectPage,
+        onDestinationSelected: (index) {
+          setState(() => selectedIndex = index);
+        },
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
             label: 'Home',
           ),
           NavigationDestination(
             icon: Icon(Icons.people_outline),
-            selectedIcon: Icon(Icons.people),
             label: 'Students',
           ),
           NavigationDestination(
             icon: Icon(Icons.fact_check_outlined),
-            selectedIcon: Icon(Icons.fact_check),
             label: 'Attendance',
           ),
           NavigationDestination(
             icon: Icon(Icons.menu_book_outlined),
-            selectedIcon: Icon(Icons.menu_book),
             label: 'Courses',
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _placeholder(String title) {
+    return Center(
+      child: Text(
+        '$title Screen Coming Soon',
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: AppTheme.navy,
+        ),
       ),
     );
   }
@@ -187,9 +177,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'Here is your institution overview.',
             style: TextStyle(color: Colors.black54),
           ),
-
           const SizedBox(height: 24),
-
           GridView.count(
             crossAxisCount: 2,
             shrinkWrap: true,
@@ -224,9 +212,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-
           const SizedBox(height: 28),
-
           const Text(
             'Quick Actions',
             style: TextStyle(
@@ -235,16 +221,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: AppTheme.navy,
             ),
           ),
-
           const SizedBox(height: 14),
-
           Row(
             children: [
               Expanded(
                 child: _ActionCard(
                   icon: Icons.person_add_alt_1,
                   title: 'Add Student',
-                  onTap: () => selectPage(1),
+                  onTap: () => setState(() => selectedIndex = 1),
                 ),
               ),
               const SizedBox(width: 12),
@@ -252,14 +236,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: _ActionCard(
                   icon: Icons.fact_check_outlined,
                   title: 'Attendance',
-                  onTap: () => selectPage(2),
+                  onTap: () => setState(() => selectedIndex = 2),
                 ),
               ),
             ],
           ),
-
           const SizedBox(height: 28),
-
           const Text(
             'Recent Students',
             style: TextStyle(
@@ -268,9 +250,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: AppTheme.navy,
             ),
           ),
-
           const SizedBox(height: 12),
-
           const _StudentTile(
             name: 'Ali Ahmad',
             rollNo: 'PSMS-001',
@@ -286,22 +266,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             rollNo: 'PSMS-003',
             initials: 'SM',
           ),
-
-          const SizedBox(height: 20),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPlaceholder(String title) {
-    return Center(
-      child: Text(
-        '$title Screen Coming Soon',
-        style: const TextStyle(
-          fontSize: 20,
-          fontWeight: FontWeight.bold,
-          color: AppTheme.navy,
-        ),
       ),
     );
   }
