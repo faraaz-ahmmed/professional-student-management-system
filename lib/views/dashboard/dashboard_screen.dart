@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
+import '../students/student_management_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,22 +21,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'Reports',
   ];
 
+  final List<IconData> drawerIcons = [
+    Icons.dashboard_outlined,
+    Icons.people_outline,
+    Icons.fact_check_outlined,
+    Icons.menu_book_outlined,
+    Icons.bar_chart_outlined,
+  ];
+
+  void selectPage(int index) {
+    setState(() => selectedIndex = index);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          titles[selectedIndex],
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          IconButton(
-            onPressed: () {},
-            icon: const Icon(Icons.notifications_none_rounded),
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: selectedIndex == 0
+          ? AppBar(
+              title: const Text(
+                'PSMS Dashboard',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                IconButton(
+                  onPressed: () {},
+                  icon: const Icon(Icons.notifications_none_rounded),
+                ),
+                const SizedBox(width: 8),
+              ],
+            )
+          : null,
+
       drawer: Drawer(
         child: SafeArea(
           child: Column(
@@ -72,44 +88,60 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
+
               for (int i = 0; i < titles.length; i++)
                 ListTile(
-                  leading: Icon(_icons[i]),
+                  leading: Icon(drawerIcons[i]),
                   title: Text(titles[i]),
                   selected: selectedIndex == i,
                   onTap: () {
-                    setState(() => selectedIndex = i);
+                    selectPage(i);
                     Navigator.pop(context);
                   },
                 ),
+
               const Spacer(),
               const Divider(),
+
               ListTile(
                 leading: const Icon(Icons.settings_outlined),
                 title: const Text('Settings'),
-                onTap: () {},
+                onTap: () {
+                  Navigator.pop(context);
+                },
+              ),
+
+              ListTile(
+                leading: const Icon(Icons.logout_rounded),
+                title: const Text('Logout'),
+                onTap: () {
+                  Navigator.pop(context);
+                  Navigator.pushNamedAndRemoveUntil(
+                    context,
+                    '/',
+                    (route) => false,
+                  );
+                },
               ),
             ],
           ),
         ),
       ),
-      body: selectedIndex == 0
-          ? _buildDashboard()
-          : Center(
-              child: Text(
-                '${titles[selectedIndex]} Screen',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.navy,
-                ),
-              ),
-            ),
+
+      body: IndexedStack(
+        index: selectedIndex,
+        children: [
+          _buildDashboard(),
+          const StudentManagementScreen(),
+          _buildPlaceholder('Attendance'),
+          _buildPlaceholder('Courses'),
+          _buildPlaceholder('Reports'),
+        ],
+      ),
+
       bottomNavigationBar: NavigationBar(
-        selectedIndex: selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => selectedIndex = index);
-        },
+        selectedIndex: selectedIndex < 4 ? selectedIndex : 0,
+        onDestinationSelected: selectPage,
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.dashboard_outlined),
@@ -136,14 +168,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  final List<IconData> _icons = [
-    Icons.dashboard_outlined,
-    Icons.people_outline,
-    Icons.fact_check_outlined,
-    Icons.menu_book_outlined,
-    Icons.bar_chart_outlined,
-  ];
-
   Widget _buildDashboard() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
@@ -163,6 +187,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'Here is your institution overview.',
             style: TextStyle(color: Colors.black54),
           ),
+
           const SizedBox(height: 24),
 
           GridView.count(
@@ -201,6 +226,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
           const SizedBox(height: 28),
+
           const Text(
             'Quick Actions',
             style: TextStyle(
@@ -209,6 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: AppTheme.navy,
             ),
           ),
+
           const SizedBox(height: 14),
 
           Row(
@@ -217,21 +244,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: _ActionCard(
                   icon: Icons.person_add_alt_1,
                   title: 'Add Student',
-                  onTap: () {},
+                  onTap: () => selectPage(1),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _ActionCard(
                   icon: Icons.fact_check_outlined,
-                  title: 'Mark Attendance',
-                  onTap: () {},
+                  title: 'Attendance',
+                  onTap: () => selectPage(2),
                 ),
               ),
             ],
           ),
 
           const SizedBox(height: 28),
+
           const Text(
             'Recent Students',
             style: TextStyle(
@@ -240,6 +268,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               color: AppTheme.navy,
             ),
           ),
+
           const SizedBox(height: 12),
 
           const _StudentTile(
@@ -257,8 +286,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
             rollNo: 'PSMS-003',
             initials: 'SM',
           ),
+
           const SizedBox(height: 20),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(String title) {
+    return Center(
+      child: Text(
+        '$title Screen Coming Soon',
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: AppTheme.navy,
+        ),
       ),
     );
   }
