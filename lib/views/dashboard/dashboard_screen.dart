@@ -8,6 +8,7 @@ import '../attendance/attendance_screen.dart';
 import '../courses/courses_screen.dart';
 import '../reports/reports_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../profile/profile_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -26,6 +27,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'Courses',
     'Reports',
     'Notifications',
+    'Profile',
   ];
 
   final List<IconData> icons = [
@@ -35,6 +37,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     Icons.menu_book_outlined,
     Icons.bar_chart_outlined,
     Icons.notifications_none,
+    Icons.person_outline,
   ];
 
   void selectPage(int index) {
@@ -158,6 +161,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const CoursesScreen(),
         const ReportsScreen(),
         const NotificationsScreen(),
+        const ProfileScreen(),
       ],
     );
   }
@@ -168,7 +172,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       color: AppTheme.navy,
       child: SafeArea(
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Padding(
               padding: EdgeInsets.all(24),
@@ -197,31 +200,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const Divider(color: Colors.white24),
-            for (int i = 0; i < titles.length; i++)
-              ListTile(
-                selected: selectedIndex == i,
-                selectedTileColor: Colors.white.withValues(alpha: 0.12),
-                leading: Icon(
-                  icons[i],
-                  color: selectedIndex == i
-                      ? AppTheme.primary
-                      : Colors.white70,
-                ),
-                title: Text(
-                  titles[i],
-                  style: TextStyle(
-                    color: selectedIndex == i
-                        ? AppTheme.primary
-                        : Colors.white,
-                    fontWeight: selectedIndex == i
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-                  ),
-                ),
-                onTap: () => selectPage(i),
+
+            // Scrollable Menu
+            Expanded(
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: titles.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    selected: selectedIndex == index,
+                    selectedTileColor: Colors.white.withValues(alpha: 0.12),
+                    leading: Icon(
+                      icons[index],
+                      color: selectedIndex == index
+                          ? AppTheme.primary
+                          : Colors.white70,
+                    ),
+                    title: Text(
+                      titles[index],
+                      style: TextStyle(
+                        color: selectedIndex == index
+                            ? AppTheme.primary
+                            : Colors.white,
+                        fontWeight: selectedIndex == index
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                    onTap: () => selectPage(index),
+                  );
+                },
               ),
-            const Spacer(),
+            ),
+
             const Divider(color: Colors.white24),
+
+            // Fixed Logout Button
             ListTile(
               leading: const Icon(
                 Icons.logout_rounded,
@@ -233,7 +247,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
               onTap: _logout,
             ),
-            const SizedBox(height: 12),
           ],
         ),
       ),
@@ -277,17 +290,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-            for (int i = 0; i < titles.length; i++)
-              ListTile(
-                leading: Icon(icons[i]),
-                title: Text(titles[i]),
-                selected: selectedIndex == i,
-                onTap: () {
-                  selectPage(i);
-                  Navigator.pop(context);
+
+            // Scrollable Drawer Menu
+            Expanded(
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: titles.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    leading: Icon(icons[index]),
+                    title: Text(titles[index]),
+                    selected: selectedIndex == index,
+                    onTap: () {
+                      selectPage(index);
+                      Navigator.pop(context);
+                    },
+                  );
                 },
               ),
-            const Spacer(),
+            ),
+
             ListTile(
               leading: const Icon(Icons.logout_rounded),
               title: const Text('Logout'),
@@ -415,6 +437,11 @@ class _DashboardHome extends StatelessWidget {
                         icon: Icons.notifications_none,
                         title: 'Notifications',
                         onTap: () => onNavigate(5),
+                      ),
+                      _ActionCard(
+                        icon: Icons.person_outline,
+                        title: 'Profile',
+                        onTap: () => onNavigate(6),
                       ),
                     ],
                   ),
