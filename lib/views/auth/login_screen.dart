@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../../core/theme/app_theme.dart';
+import '../../services/auth_service.dart';
 import '../dashboard/dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,13 +16,14 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
+  final authService = AuthService();
 
   bool obscurePassword = true;
   bool isLoading = false;
 
   Future<void> login() async {
     final email = emailController.text.trim();
-    final password = passwordController.text.trim();
+    final password = passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
       showMessage('Please enter email and password.');
@@ -31,7 +33,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => isLoading = true);
 
     try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
+      await authService.login(
         email: email,
         password: password,
       );
@@ -62,12 +64,12 @@ class _LoginScreenState extends State<LoginScreen> {
           message = 'Too many attempts. Please try again later.';
           break;
         default:
-          message = e.message ?? 'Login failed. Please try again.';
+          message = e.message ?? 'Login failed.';
       }
 
       showMessage(message);
     } catch (e) {
-      showMessage('Something went wrong. Please try again.');
+      showMessage(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) {
         setState(() => isLoading = false);
