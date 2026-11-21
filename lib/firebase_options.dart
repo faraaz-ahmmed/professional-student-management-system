@@ -56,7 +56,6 @@ class DefaultFirebaseOptions {
     projectId: 'psms-86e5c',
     storageBucket: 'psms-86e5c.firebasestorage.app',
   );
-
   static const FirebaseOptions ios = FirebaseOptions(
     apiKey: 'AIzaSyClks871UfyuCW3-EZVHPiJOX_w-6bWr3w',
     appId: '1:1074325001330:ios:c471884761bf3ca0775eeb',
@@ -65,7 +64,6 @@ class DefaultFirebaseOptions {
     storageBucket: 'psms-86e5c.firebasestorage.app',
     iosBundleId: 'com.example.psms',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
     apiKey: 'AIzaSyClks871UfyuCW3-EZVHPiJOX_w-6bWr3w',
     appId: '1:1074325001330:ios:c471884761bf3ca0775eeb',
