@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1074325001330",
+    "project_id": "psms-86e5c",
+    "storage_bucket": "psms-86e5c.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1074325001330:android:3a641dd42390c074775eeb",
+        "android_client_info": {
+          "package_name": "com.example.psms"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBS7ZzCOZvJKkVSTsd0QH8qlPBUmjBVBZk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
