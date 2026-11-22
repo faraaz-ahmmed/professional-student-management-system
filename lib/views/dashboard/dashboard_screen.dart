@@ -1,7 +1,10 @@
 
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../core/notification_badge.dart';
+import '../../services/auth_service.dart';
 import '../auth/login_screen.dart';
 import '../students/student_management_screen.dart';
 import '../attendance/attendance_screen.dart';
@@ -19,6 +22,8 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int selectedIndex = 0;
+
+  final AuthService _authService = AuthService();
 
   final List<String> titles = [
     'Dashboard',
@@ -200,8 +205,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const Divider(color: Colors.white24),
-
-            // Scrollable Menu
             Expanded(
               child: ListView.builder(
                 padding: EdgeInsets.zero,
@@ -232,10 +235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
             ),
-
             const Divider(color: Colors.white24),
-
-            // Fixed Logout Button
             ListTile(
               leading: const Icon(
                 Icons.logout_rounded,
@@ -290,8 +290,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
             ),
-
-            // Scrollable Drawer Menu
             Expanded(
               child: ListView.builder(
                 padding: EdgeInsets.zero,
@@ -309,7 +307,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 },
               ),
             ),
-
             ListTile(
               leading: const Icon(Icons.logout_rounded),
               title: const Text('Logout'),
@@ -321,7 +318,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _logout() {
+  Future<void> _logout() async {
+    await _authService.logout();
+
+    if (!mounted) return;
+
     Navigator.pushAndRemoveUntil(
       context,
       MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -334,6 +335,33 @@ class _DashboardHome extends StatelessWidget {
   final ValueChanged<int> onNavigate;
 
   const _DashboardHome({required this.onNavigate});
+
+  final List<Map<String, dynamic>> stats = const [
+    {
+      'title': 'Total Students',
+      'collection': 'students',
+      'icon': Icons.people_alt_outlined,
+      'color': Color(0xFF2563EB),
+    },
+    {
+      'title': 'Teachers',
+      'collection': 'teachers',
+      'icon': Icons.person_outline,
+      'color': Color(0xFF16A34A),
+    },
+    {
+      'title': 'Courses',
+      'collection': 'courses',
+      'icon': Icons.menu_book_outlined,
+      'color': Color(0xFF9333EA),
+    },
+    {
+      'title': 'Attendance Records',
+      'collection': 'attendance',
+      'icon': Icons.fact_check_outlined,
+      'color': Color(0xFFEA8A08),
+    },
+  ];
 
   @override
   Widget build(BuildContext context) {
@@ -365,39 +393,26 @@ class _DashboardHome extends StatelessWidget {
                     style: TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 24),
-                  GridView.count(
-                    crossAxisCount: columns,
+                  GridView.builder(
+                    itemCount: stats.length,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                    childAspectRatio: isDesktop ? 1.5 : 1.7,
-                    children: const [
-                      _StatCard(
-                        title: 'Total Students',
-                        value: '250',
-                        icon: Icons.people_alt_outlined,
-                        color: Color(0xFF2563EB),
-                      ),
-                      _StatCard(
-                        title: 'Teachers',
-                        value: '18',
-                        icon: Icons.person_outline,
-                        color: Color(0xFF16A34A),
-                      ),
-                      _StatCard(
-                        title: 'Courses',
-                        value: '12',
-                        icon: Icons.menu_book_outlined,
-                        color: Color(0xFF9333EA),
-                      ),
-                      _StatCard(
-                        title: 'Attendance',
-                        value: '92%',
-                        icon: Icons.fact_check_outlined,
-                        color: Color(0xFFEA8A08),
-                      ),
-                    ],
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: columns,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                      childAspectRatio: isDesktop ? 1.5 : 1.7,
+                    ),
+                    itemBuilder: (context, index) {
+                      final stat = stats[index];
+
+                      return _StatCard(
+                        title: stat['title'],
+                        collection: stat['collection'],
+                        icon: stat['icon'],
+                        color: stat['color'],
+                      );
+                    },
                   ),
                   const SizedBox(height: 28),
                   const Text(
@@ -455,21 +470,7 @@ class _DashboardHome extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const _StudentTile(
-                    name: 'Ali Ahmad',
-                    rollNo: 'PSMS-001',
-                    initials: 'AA',
-                  ),
-                  const _StudentTile(
-                    name: 'Ahmed Khan',
-                    rollNo: 'PSMS-002',
-                    initials: 'AK',
-                  ),
-                  const _StudentTile(
-                    name: 'Sara Malik',
-                    rollNo: 'PSMS-003',
-                    initials: 'SM',
-                  ),
+                  const _RecentStudents(),
                 ],
               ),
             ),
@@ -482,47 +483,111 @@ class _DashboardHome extends StatelessWidget {
 
 class _StatCard extends StatelessWidget {
   final String title;
-  final String value;
+  final String collection;
   final IconData icon;
   final Color color;
 
   const _StatCard({
     required this.title,
-    required this.value,
+    required this.collection,
     required this.icon,
     required this.color,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Icon(icon, color: color, size: 27),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 23,
-              fontWeight: FontWeight.bold,
-              color: AppTheme.navy,
-            ),
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection(collection)
+          .snapshots(),
+      builder: (context, snapshot) {
+        String value = '...';
+
+        if (snapshot.hasData) {
+          value = snapshot.data!.docs.length.toString();
+        } else if (snapshot.hasError) {
+          value = 'Error';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
           ),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: color, size: 27),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 23,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.navy,
+                ),
+              ),
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.black54,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
+    );
+  }
+}
+
+class _RecentStudents extends StatelessWidget {
+  const _RecentStudents();
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: FirebaseFirestore.instance
+          .collection('students')
+          .limit(3)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return const Text('Unable to load students.');
+        }
+
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final students = snapshot.data!.docs;
+
+        if (students.isEmpty) {
+          return const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('No students added yet.'),
+          );
+        }
+
+        return Column(
+          children: students.map((student) {
+            final data = student.data();
+            final name = data['name']?.toString() ?? 'Unknown Student';
+            final rollNo = data['rollNo']?.toString() ?? 'No Roll Number';
+            final initials = name.isNotEmpty
+                ? name[0].toUpperCase()
+                : '?';
+
+            return _StudentTile(
+              name: name,
+              rollNo: rollNo,
+              initials: initials,
+            );
+          }).toList(),
+        );
+      },
     );
   }
 }

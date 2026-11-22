@@ -1,21 +1,40 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
+import '../../services/notification_service.dart';
 
 class Student {
-  String name;
-  String rollNo;
-  String email;
-  String course;
-  String phone;
+  final String id;
+  final String name;
+  final String rollNo;
+  final String email;
+  final String course;
+  final String phone;
 
   Student({
+    required this.id,
     required this.name,
     required this.rollNo,
     required this.email,
     required this.course,
     required this.phone,
   });
+
+  factory Student.fromFirestore(
+    String id,
+    Map<String, dynamic> data,
+  ) {
+    return Student(
+      id: id,
+      name: data['name'] ?? '',
+      rollNo: data['rollNo'] ?? '',
+      email: data['email'] ?? '',
+      course: data['course'] ?? '',
+      phone: data['phone'] ?? '',
+    );
+  }
 }
 
 class StudentManagementScreen extends StatefulWidget {
@@ -27,40 +46,15 @@ class StudentManagementScreen extends StatefulWidget {
 }
 
 class _StudentManagementScreenState extends State<StudentManagementScreen> {
-  final List<Student> students = [
-    Student(
-      name: 'Ali Ahmad',
-      rollNo: 'PSMS-001',
-      email: 'ali@gmail.com',
-      course: 'Computer Science',
-      phone: '03001234567',
-    ),
-    Student(
-      name: 'Ahmed Khan',
-      rollNo: 'PSMS-002',
-      email: 'ahmed@gmail.com',
-      course: 'Software Engineering',
-      phone: '03001234568',
-    ),
-    Student(
-      name: 'Sara Malik',
-      rollNo: 'PSMS-003',
-      email: 'sara@gmail.com',
-      course: 'Information Technology',
-      phone: '03001234569',
-    ),
-  ];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final NotificationService _notificationService = NotificationService();
 
-  final searchController = TextEditingController();
+  final TextEditingController searchController = TextEditingController();
 
-  List<Student> get filteredStudents {
-    final query = searchController.text.toLowerCase();
+  CollectionReference<Map<String, dynamic>> get _students =>
+      _firestore.collection('students');
 
-    return students.where((student) {
-      return student.name.toLowerCase().contains(query) ||
-          student.rollNo.toLowerCase().contains(query);
-    }).toList();
-  }
+  String searchQuery = '';
 
   @override
   void dispose() {
@@ -68,14 +62,14 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     super.dispose();
   }
 
-  void showStudentForm({Student? student}) {
+  Future<void> showStudentForm({Student? student}) async {
     final nameController = TextEditingController(text: student?.name ?? '');
     final rollController = TextEditingController(text: student?.rollNo ?? '');
     final emailController = TextEditingController(text: student?.email ?? '');
     final courseController = TextEditingController(text: student?.course ?? '');
     final phoneController = TextEditingController(text: student?.phone ?? '');
 
-    showDialog(
+    await showDialog(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: Text(student == null ? 'Add Student' : 'Edit Student'),
@@ -101,54 +95,97 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
               backgroundColor: AppTheme.primary,
               foregroundColor: AppTheme.navy,
             ),
-            onPressed: () {
-              if (nameController.text.trim().isEmpty ||
-                  rollController.text.trim().isEmpty ||
-                  emailController.text.trim().isEmpty ||
-                  courseController.text.trim().isEmpty ||
-                  phoneController.text.trim().isEmpty) {
+            onPressed: () async {
+              final name = nameController.text.trim();
+              final rollNo = rollController.text.trim();
+              final email = emailController.text.trim();
+              final course = courseController.text.trim();
+              final phone = phoneController.text.trim();
+
+              if (name.isEmpty ||
+                  rollNo.isEmpty ||
+                  email.isEmpty ||
+                  course.isEmpty ||
+                  phone.isEmpty) {
                 return;
               }
 
-              final duplicate = students.any((item) =>
-                  item.rollNo.toLowerCase() ==
-                      rollController.text.trim().toLowerCase() &&
-                  item != student);
+              try {
+                final duplicate = await _students
+                    .where('rollNo', isEqualTo: rollNo)
+                    .get();
 
-              if (duplicate) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Roll number already exists')),
+                final alreadyExists = duplicate.docs.any(
+                  (doc) => doc.id != student?.id,
                 );
-                return;
-              }
 
-              setState(() {
-                if (student == null) {
-                  students.add(
-                    Student(
-                      name: nameController.text.trim(),
-                      rollNo: rollController.text.trim(),
-                      email: emailController.text.trim(),
-                      course: courseController.text.trim(),
-                      phone: phoneController.text.trim(),
+                if (alreadyExists) {
+                  if (!mounted) return;
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Roll number already exists'),
                     ),
                   );
-                } else {
-                  student.name = nameController.text.trim();
-                  student.rollNo = rollController.text.trim();
-                  student.email = emailController.text.trim();
-                  student.course = courseController.text.trim();
-                  student.phone = phoneController.text.trim();
+                  return;
                 }
-              });
 
-              Navigator.pop(dialogContext);
+                final studentData = {
+                  'name': name,
+                  'rollNo': rollNo,
+                  'email': email,
+                  'course': course,
+                  'phone': phone,
+                  'updatedAt': FieldValue.serverTimestamp(),
+                };
+
+                if (student == null) {
+                  await _students.add({
+                    ...studentData,
+                    'createdAt': FieldValue.serverTimestamp(),
+                  });
+
+                  await _notificationService.addNotification(
+                    title: 'New Student Registered',
+                    message: '$name has been added to the system.',
+                    type: 'student',
+                  );
+                } else {
+                  await _students.doc(student.id).update(studentData);
+                }
+
+                if (!mounted) return;
+
+                Navigator.pop(dialogContext);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      student == null
+                          ? 'Student added successfully'
+                          : 'Student updated successfully',
+                    ),
+                  ),
+                );
+              } catch (e) {
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
             },
             child: Text(student == null ? 'Add Student' : 'Save Changes'),
           ),
         ],
       ),
     );
+
+    nameController.dispose();
+    rollController.dispose();
+    emailController.dispose();
+    courseController.dispose();
+    phoneController.dispose();
   }
 
   Widget _field(TextEditingController controller, String label) {
@@ -166,18 +203,26 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     );
   }
 
-  void deleteStudent(Student student) {
-    setState(() => students.remove(student));
+  Future<void> deleteStudent(Student student) async {
+    try {
+      await _students.doc(student.id).delete();
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Student deleted successfully')),
-    );
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Student deleted successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final filtered = filteredStudents;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -198,14 +243,16 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
             padding: const EdgeInsets.all(16),
             child: TextField(
               controller: searchController,
-              onChanged: (_) => setState(() {}),
+              onChanged: (value) {
+                setState(() => searchQuery = value.toLowerCase().trim());
+              },
               decoration: InputDecoration(
                 hintText: 'Search by name or roll number',
                 prefixIcon: const Icon(Icons.search),
                 suffixIcon: IconButton(
                   onPressed: () {
                     searchController.clear();
-                    setState(() {});
+                    setState(() => searchQuery = '');
                   },
                   icon: const Icon(Icons.close),
                 ),
@@ -225,81 +272,117 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  '${students.length} Students',
-                  style: const TextStyle(color: Colors.black54),
+                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _students.snapshots(),
+                  builder: (context, snapshot) {
+                    final count = snapshot.data?.docs.length ?? 0;
+
+                    return Text(
+                      '$count Students',
+                      style: const TextStyle(color: Colors.black54),
+                    );
+                  },
                 ),
               ],
             ),
           ),
           const SizedBox(height: 10),
           Expanded(
-            child: filtered.isEmpty
-                ? const Center(child: Text('No students found'))
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-                    itemCount: filtered.length,
-                    itemBuilder: (context, index) {
-                      final student = filtered[index];
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _students.snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return const Center(
+                    child: Text('Unable to load students'),
+                  );
+                }
 
-                      return Card(
-                        color: Colors.white,
-                        elevation: 0,
-                        margin: const EdgeInsets.only(bottom: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.all(12),
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFFFFE9A8),
-                            child: Text(
-                              student.name.isNotEmpty
-                                  ? student.name[0].toUpperCase()
-                                  : '?',
-                              style: const TextStyle(
-                                color: AppTheme.navy,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          title: Text(
-                            student.name,
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                final students = snapshot.data!.docs
+                    .map(
+                      (doc) => Student.fromFirestore(doc.id, doc.data()),
+                    )
+                    .where((student) {
+                      return student.name.toLowerCase().contains(searchQuery) ||
+                          student.rollNo.toLowerCase().contains(searchQuery);
+                    })
+                    .toList();
+
+                if (students.isEmpty) {
+                  return const Center(child: Text('No students found'));
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+                  itemCount: students.length,
+                  itemBuilder: (context, index) {
+                    final student = students[index];
+
+                    return Card(
+                      color: Colors.white,
+                      elevation: 0,
+                      margin: const EdgeInsets.only(bottom: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(12),
+                        leading: CircleAvatar(
+                          backgroundColor: const Color(0xFFFFE9A8),
+                          child: Text(
+                            student.name.isNotEmpty
+                                ? student.name[0].toUpperCase()
+                                : '?',
                             style: const TextStyle(
-                              fontWeight: FontWeight.bold,
                               color: AppTheme.navy,
+                              fontWeight: FontWeight.bold,
                             ),
-                          ),
-                          subtitle: Padding(
-                            padding: const EdgeInsets.only(top: 5),
-                            child: Text(
-                              '${student.rollNo}\n${student.course}',
-                            ),
-                          ),
-                          isThreeLine: true,
-                          trailing: PopupMenuButton<String>(
-                            onSelected: (value) {
-                              if (value == 'edit') {
-                                showStudentForm(student: student);
-                              } else if (value == 'delete') {
-                                deleteStudent(student);
-                              }
-                            },
-                            itemBuilder: (_) => const [
-                              PopupMenuItem(
-                                value: 'edit',
-                                child: Text('Edit'),
-                              ),
-                              PopupMenuItem(
-                                value: 'delete',
-                                child: Text('Delete'),
-                              ),
-                            ],
                           ),
                         ),
-                      );
-                    },
-                  ),
+                        title: Text(
+                          student.name,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.navy,
+                          ),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 5),
+                          child: Text(
+                            '${student.rollNo}\n${student.course}',
+                          ),
+                        ),
+                        isThreeLine: true,
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              showStudentForm(student: student);
+                            } else if (value == 'delete') {
+                              deleteStudent(student);
+                            }
+                          },
+                          itemBuilder: (context) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Edit'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),

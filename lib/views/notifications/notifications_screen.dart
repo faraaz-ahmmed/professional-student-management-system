@@ -1,24 +1,79 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../core/notification_badge.dart';
+import '../../services/notification_service.dart';
 
 class AppNotification {
+  final String id;
   final String title;
   final String message;
   final String time;
   final IconData icon;
   final Color color;
-  bool isRead;
+  final bool isRead;
 
   AppNotification({
+    required this.id,
     required this.title,
     required this.message,
     required this.time,
     required this.icon,
     required this.color,
-    this.isRead = false,
+    required this.isRead,
   });
+
+  factory AppNotification.fromFirestore(
+    String id,
+    Map<String, dynamic> data,
+  ) {
+    final type = data['type'] ?? 'system';
+
+    IconData icon = Icons.notifications_outlined;
+    Color color = const Color(0xFFEA8A08);
+
+    if (type == 'student') {
+      icon = Icons.person_add_alt_1;
+      color = const Color(0xFF2563EB);
+    } else if (type == 'course') {
+      icon = Icons.menu_book_outlined;
+      color = const Color(0xFF9333EA);
+    } else if (type == 'attendance') {
+      icon = Icons.fact_check_outlined;
+      color = const Color(0xFF16A34A);
+    }
+
+    final timestamp = data['createdAt'] as Timestamp?;
+    String time = 'Just now';
+
+    if (timestamp != null) {
+      final difference = DateTime.now().difference(timestamp.toDate());
+
+      if (difference.inMinutes < 1) {
+        time = 'Just now';
+      } else if (difference.inHours < 1) {
+        time = '${difference.inMinutes} minutes ago';
+      } else if (difference.inDays < 1) {
+        time = '${difference.inHours} hours ago';
+      } else if (difference.inDays == 1) {
+        time = 'Yesterday';
+      } else {
+        time = '${difference.inDays} days ago';
+      }
+    }
+
+    return AppNotification(
+      id: id,
+      title: data['title'] ?? 'Notification',
+      message: data['message'] ?? '',
+      time: time,
+      icon: icon,
+      color: color,
+      isRead: data['isRead'] ?? false,
+    );
+  }
 }
 
 class NotificationsScreen extends StatefulWidget {
@@ -29,69 +84,22 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final List<AppNotification> notifications = [
-    AppNotification(
-      title: 'New Student Registered',
-      message: 'A new student has been added to the system.',
-      time: '10 minutes ago',
-      icon: Icons.person_add_alt_1,
-      color: const Color(0xFF2563EB),
-    ),
-    AppNotification(
-      title: 'Attendance Updated',
-      message: 'Today attendance has been marked successfully.',
-      time: '1 hour ago',
-      icon: Icons.fact_check_outlined,
-      color: const Color(0xFF16A34A),
-    ),
-    AppNotification(
-      title: 'New Course Added',
-      message: 'A new course has been added to your institution.',
-      time: 'Yesterday',
-      icon: Icons.menu_book_outlined,
-      color: const Color(0xFF9333EA),
-      isRead: true,
-    ),
-    AppNotification(
-      title: 'System Update',
-      message: 'Your PSMS dashboard is ready to use.',
-      time: '2 days ago',
-      icon: Icons.system_update_outlined,
-      color: const Color(0xFFEA8A08),
-      isRead: true,
-    ),
-  ];
+  final NotificationService _notificationService = NotificationService();
 
-  void markAsRead(AppNotification notification) {
-    if (notification.isRead) return;
-
-    setState(() => notification.isRead = true);
-    NotificationBadge.decrease();
+  Future<void> markAsRead(String id) async {
+    await _notificationService.markAsRead(id);
   }
 
-  void markAllAsRead() {
-    setState(() {
-      for (final notification in notifications) {
-        notification.isRead = true;
-      }
-    });
-
-    NotificationBadge.clear();
+  Future<void> markAllAsRead() async {
+    await _notificationService.markAllAsRead();
   }
 
-  void deleteNotification(int index) {
-    final notification = notifications[index];
-
-    if (!notification.isRead) {
-      NotificationBadge.decrease();
-    }
-
-    setState(() => notifications.removeAt(index));
+  Future<void> deleteNotification(String id) async {
+    await _notificationService.deleteNotification(id);
   }
 
-  void clearAll() {
-    setState(() => notifications.clear());
-    NotificationBadge.clear();
+  Future<void> clearAll() async {
+    await _notificationService.clearAll();
   }
 
   @override
@@ -103,33 +111,63 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
-          if (NotificationBadge.unreadCount.value > 0)
-            TextButton(
-              onPressed: markAllAsRead,
-              child: const Text(
-                'Mark all read',
-                style: TextStyle(color: AppTheme.navy),
-              ),
-            ),
+          ValueListenableBuilder<int>(
+            valueListenable: NotificationBadge.unreadCount,
+            builder: (context, count, child) {
+              if (count == 0) return const SizedBox.shrink();
+
+              return TextButton(
+                onPressed: markAllAsRead,
+                child: const Text(
+                  'Mark all read',
+                  style: TextStyle(color: AppTheme.navy),
+                ),
+              );
+            },
+          ),
           const SizedBox(width: 8),
         ],
       ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isWide = constraints.maxWidth >= 700;
+      body: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+        stream: _notificationService.getNotifications(),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return const Center(
+              child: Text('Unable to load notifications'),
+            );
+          }
 
-          return Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 900),
-              child: Padding(
-                padding: EdgeInsets.all(isWide ? 24 : 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ValueListenableBuilder<int>(
-                      valueListenable: NotificationBadge.unreadCount,
-                      builder: (context, count, child) {
-                        return Container(
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final docs = snapshot.data?.docs ?? [];
+
+          final notifications = docs
+              .map(
+                (doc) => AppNotification.fromFirestore(
+                  doc.id,
+                  doc.data(),
+                ),
+              )
+              .toList();
+
+          final unreadCount =
+              notifications.where((notification) => !notification.isRead).length;
+
+          return LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 700;
+
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 900),
+                  child: Padding(
+                    padding: EdgeInsets.all(isWide ? 24 : 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
                           width: double.infinity,
                           padding: const EdgeInsets.all(18),
                           decoration: BoxDecoration(
@@ -158,7 +196,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      '$count unread notifications',
+                                      '$unreadCount unread notifications',
                                       style: const TextStyle(
                                         color: Colors.white70,
                                       ),
@@ -177,58 +215,59 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                 ),
                             ],
                           ),
-                        );
-                      },
-                    ),
-                    const SizedBox(height: 22),
-                    const Text(
-                      'Recent Activity',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.navy,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    Expanded(
-                      child: notifications.isEmpty
-                          ? const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.notifications_off_outlined,
-                                    size: 55,
-                                    color: Colors.black26,
+                        ),
+                        const SizedBox(height: 22),
+                        const Text(
+                          'Recent Activity',
+                          style: TextStyle(
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                            color: AppTheme.navy,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: notifications.isEmpty
+                              ? const Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.notifications_off_outlined,
+                                        size: 55,
+                                        color: Colors.black26,
+                                      ),
+                                      SizedBox(height: 12),
+                                      Text(
+                                        'No notifications',
+                                        style: TextStyle(
+                                          color: Colors.black54,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  SizedBox(height: 12),
-                                  Text(
-                                    'No notifications',
-                                    style: TextStyle(
-                                      color: Colors.black54,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: notifications.length,
-                              itemBuilder: (context, index) {
-                                final notification = notifications[index];
+                                )
+                              : ListView.builder(
+                                  itemCount: notifications.length,
+                                  itemBuilder: (context, index) {
+                                    final notification = notifications[index];
 
-                                return _NotificationTile(
-                                  notification: notification,
-                                  onTap: () => markAsRead(notification),
-                                  onDelete: () => deleteNotification(index),
-                                );
-                              },
-                            ),
+                                    return _NotificationTile(
+                                      notification: notification,
+                                      onTap: () => markAsRead(notification.id),
+                                      onDelete: () =>
+                                          deleteNotification(notification.id),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           );
         },
       ),
@@ -267,7 +306,7 @@ class _NotificationTile extends StatelessWidget {
           horizontal: 14,
           vertical: 8,
         ),
-        onTap: onTap,
+        onTap: notification.isRead ? null : onTap,
         leading: CircleAvatar(
           backgroundColor: notification.color.withValues(alpha: 0.12),
           child: Icon(notification.icon, color: notification.color),
