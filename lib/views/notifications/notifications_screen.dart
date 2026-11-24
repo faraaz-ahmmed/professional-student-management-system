@@ -113,8 +113,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         actions: [
           ValueListenableBuilder<int>(
             valueListenable: NotificationBadge.unreadCount,
-            builder: (context, count, child) {
-              if (count == 0) return const SizedBox.shrink();
+            builder: (context, unreadCount, child) {
+              if (unreadCount == 0) {
+                return const SizedBox.shrink();
+              }
 
               return TextButton(
                 onPressed: markAllAsRead,

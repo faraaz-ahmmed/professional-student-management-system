@@ -40,143 +40,150 @@ class _CoursesScreenState extends State<CoursesScreen> {
         TextEditingController(text: course?['duration']?.toString() ?? '');
 
     final formKey = GlobalKey<FormState>();
+    final messenger = ScaffoldMessenger.of(context);
     bool isSaving = false;
 
-    await showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(courseId == null ? 'Add Course' : 'Edit Course'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _field(nameController, 'Course Name'),
-                  _field(codeController, 'Course Code'),
-                  _field(instructorController, 'Instructor Name'),
-                  _field(durationController, 'Duration'),
-                ],
+    try {
+      await showDialog(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(courseId == null ? 'Add Course' : 'Edit Course'),
+            content: SingleChildScrollView(
+              child: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _field(nameController, 'Course Name'),
+                    _field(codeController, 'Course Code'),
+                    _field(instructorController, 'Instructor Name'),
+                    _field(durationController, 'Duration'),
+                  ],
+                ),
               ),
             ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isSaving
-                  ? null
-                  : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primary,
-                foregroundColor: AppTheme.navy,
+            actions: [
+              TextButton(
+                onPressed: isSaving
+                    ? null
+                    : () => Navigator.pop(dialogContext),
+                child: const Text('Cancel'),
               ),
-              onPressed: isSaving
-                  ? null
-                  : () async {
-                      if (!formKey.currentState!.validate()) return;
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primary,
+                  foregroundColor: AppTheme.navy,
+                ),
+                onPressed: isSaving
+                    ? null
+                    : () async {
+                        if (!formKey.currentState!.validate()) return;
 
-                      setDialogState(() => isSaving = true);
+                        setDialogState(() => isSaving = true);
 
-                      try {
-                        final code = codeController.text.trim();
+                        try {
+                          final code = codeController.text.trim();
 
-                        final duplicate = await _courses
-                            .where('code', isEqualTo: code)
-                            .get();
+                          final duplicate = await _courses
+                              .where('code', isEqualTo: code)
+                              .get();
 
-                        final exists = duplicate.docs.any(
-                          (doc) => doc.id != courseId,
-                        );
+                          if (!dialogContext.mounted) return;
 
-                        if (exists) {
-                          setDialogState(() => isSaving = false);
-
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Course code already exists'),
-                            ),
+                          final exists = duplicate.docs.any(
+                            (doc) => doc.id != courseId,
                           );
-                          return;
-                        }
 
-                        final data = <String, dynamic>{
-                          'name': nameController.text.trim(),
-                          'code': code,
-                          'instructor': instructorController.text.trim(),
-                          'duration': durationController.text.trim(),
-                          'updatedAt': FieldValue.serverTimestamp(),
-                        };
+                          if (exists) {
+                            setDialogState(() => isSaving = false);
 
-                        if (courseId == null) {
-                          data['createdAt'] = FieldValue.serverTimestamp();
-
-                          await _courses.add(data);
-                        } else {
-                          await _courses.doc(courseId).update(data);
-                        }
-
-                        if (dialogContext.mounted) {
-                          Navigator.pop(dialogContext);
-                        }
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                courseId == null
-                                    ? 'Course added successfully'
-                                    : 'Course updated successfully',
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Course code already exists'),
                               ),
-                            ),
-                          );
-                        }
+                            );
+                            return;
+                          }
 
-                        if (courseId == null) {
-                          try {
-                            await _firestore
-                                .collection('notifications')
-                                .add({
-                              'title': 'New Course Added',
-                              'message':
-                                  '${nameController.text.trim()} ($code) added successfully.',
-                              'type': 'course',
-                              'isRead': false,
-                              'createdAt': FieldValue.serverTimestamp(),
-                            });
-                          } catch (e) {
-                            debugPrint('Notification error: $e');
+                          final data = <String, dynamic>{
+                            'name': nameController.text.trim(),
+                            'code': code,
+                            'instructor': instructorController.text.trim(),
+                            'duration': durationController.text.trim(),
+                            'updatedAt': FieldValue.serverTimestamp(),
+                          };
+
+                          if (courseId == null) {
+                            data['createdAt'] =
+                                FieldValue.serverTimestamp();
+                            await _courses.add(data);
+                          } else {
+                            await _courses.doc(courseId).update(data);
+                          }
+
+                          if (!dialogContext.mounted) return;
+
+                          Navigator.pop(dialogContext);
+
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  courseId == null
+                                      ? 'Course added successfully'
+                                      : 'Course updated successfully',
+                                ),
+                              ),
+                            );
+                          }
+
+                          if (courseId == null) {
+                            try {
+                              await _firestore
+                                  .collection('notifications')
+                                  .add({
+                                'title': 'New Course Added',
+                                'message':
+                                    '${nameController.text.trim()} ($code) added successfully.',
+                                'type': 'course',
+                                'isRead': false,
+                                'createdAt': FieldValue.serverTimestamp(),
+                              });
+                            } catch (e) {
+                              debugPrint('Notification error: $e');
+                            }
+                          }
+                        } catch (e) {
+                          if (dialogContext.mounted) {
+                            setDialogState(() => isSaving = false);
+                          }
+
+                          if (mounted) {
+                            messenger.showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
                           }
                         }
-                      } catch (e) {
-                        setDialogState(() => isSaving = false);
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(this.context).showSnackBar(
-                            SnackBar(content: Text('Error: $e')),
-                          );
-                        }
-                      }
-                    },
-              child: isSaving
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(courseId == null ? 'Add Course' : 'Save Changes'),
-            ),
-          ],
+                      },
+                child: isSaving
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(courseId == null ? 'Add Course' : 'Save Changes'),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
-
-    nameController.dispose();
-    codeController.dispose();
-    instructorController.dispose();
-    durationController.dispose();
+      );
+    } finally {
+      nameController.dispose();
+      codeController.dispose();
+      instructorController.dispose();
+      durationController.dispose();
+    }
   }
 
   Widget _field(TextEditingController controller, String label) {
@@ -201,18 +208,20 @@ class _CoursesScreenState extends State<CoursesScreen> {
   }
 
   Future<void> deleteCourse(String courseId) async {
+    final messenger = ScaffoldMessenger.of(context);
+
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text('Delete Course'),
         content: const Text('Are you sure you want to delete this course?'),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(dialogContext, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(dialogContext, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.red,
               foregroundColor: Colors.white,
@@ -223,22 +232,22 @@ class _CoursesScreenState extends State<CoursesScreen> {
       ),
     );
 
-    if (confirm != true) return;
+    if (confirm != true || !mounted) return;
 
     try {
       await _courses.doc(courseId).delete();
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Course deleted successfully')),
-        );
-      }
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Course deleted successfully')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $e')),
-        );
-      }
+      if (!mounted) return;
+
+      messenger.showSnackBar(
+        SnackBar(content: Text('Delete failed: $e')),
+      );
     }
   }
 
@@ -317,7 +326,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
                 }
 
                 if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
                 }
 
                 final courses = snapshot.data!.docs.where((doc) {
