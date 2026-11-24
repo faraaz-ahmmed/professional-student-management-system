@@ -2,7 +2,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/theme/app_theme.dart';
 import '../../services/notification_service.dart';
 
 class Student {
@@ -23,11 +22,12 @@ class Student {
   });
 
   factory Student.fromFirestore(
-    String id,
-    Map<String, dynamic> data,
+    DocumentSnapshot<Map<String, dynamic>> doc,
   ) {
+    final data = doc.data() ?? {};
+
     return Student(
-      id: id,
+      id: doc.id,
       name: data['name'] ?? '',
       rollNo: data['rollNo'] ?? '',
       email: data['email'] ?? '',
@@ -45,86 +45,75 @@ class StudentManagementScreen extends StatefulWidget {
       _StudentManagementScreenState();
 }
 
-class _StudentManagementScreenState extends State<StudentManagementScreen> {
+class _StudentManagementScreenState
+    extends State<StudentManagementScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final NotificationService _notificationService = NotificationService();
 
-  final TextEditingController searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   CollectionReference<Map<String, dynamic>> get _students =>
       _firestore.collection('students');
 
-  String searchQuery = '';
+  String _searchQuery = '';
 
   @override
   void dispose() {
-    searchController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> showStudentForm({Student? student}) async {
+  Future<void> _showStudentDialog({Student? student}) async {
+    final formKey = GlobalKey<FormState>();
+
     final nameController = TextEditingController(text: student?.name ?? '');
-    final rollController = TextEditingController(text: student?.rollNo ?? '');
+    final rollController = TextEditingController(
+      text: student == null
+          ? ''
+          : student.rollNo.replaceFirst(
+              RegExp(r'^PSMS-', caseSensitive: false),
+              '',
+            ),
+    );
     final emailController = TextEditingController(text: student?.email ?? '');
-    final courseController = TextEditingController(text: student?.course ?? '');
+    final courseController =
+        TextEditingController(text: student?.course ?? '');
     final phoneController = TextEditingController(text: student?.phone ?? '');
+
+    bool isSaving = false;
 
     await showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: Text(student == null ? 'Add Student' : 'Edit Student'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _field(nameController, 'Full Name'),
-              _field(rollController, 'Roll Number'),
-              _field(emailController, 'Email Address'),
-              _field(courseController, 'Course'),
-              _field(phoneController, 'Phone Number'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: AppTheme.navy,
-            ),
-            onPressed: () async {
-              final name = nameController.text.trim();
-              final rollNo = rollController.text.trim();
-              final email = emailController.text.trim();
-              final course = courseController.text.trim();
-              final phone = phoneController.text.trim();
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            Future<void> saveStudent() async {
+              if (!formKey.currentState!.validate()) return;
 
-              if (name.isEmpty ||
-                  rollNo.isEmpty ||
-                  email.isEmpty ||
-                  course.isEmpty ||
-                  phone.isEmpty) {
-                return;
-              }
+              setDialogState(() => isSaving = true);
 
               try {
+                final name = nameController.text.trim();
+                final rollDigits = rollController.text.trim();
+                final rollNo = 'PSMS-$rollDigits';
+
                 final duplicate = await _students
                     .where('rollNo', isEqualTo: rollNo)
                     .get();
+
+                if (!dialogContext.mounted) return;
 
                 final alreadyExists = duplicate.docs.any(
                   (doc) => doc.id != student?.id,
                 );
 
                 if (alreadyExists) {
-                  if (!mounted) return;
+                  setDialogState(() => isSaving = false);
 
-                  ScaffoldMessenger.of(context).showSnackBar(
+                  ScaffoldMessenger.of(dialogContext).showSnackBar(
                     const SnackBar(
-                      content: Text('Roll number already exists'),
+                      content: Text('This roll number already exists.'),
+                      backgroundColor: Colors.red,
                     ),
                   );
                   return;
@@ -133,9 +122,9 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 final studentData = {
                   'name': name,
                   'rollNo': rollNo,
-                  'email': email,
-                  'course': course,
-                  'phone': phone,
+                  'email': emailController.text.trim(),
+                  'course': courseController.text.trim(),
+                  'phone': phoneController.text.trim(),
                   'updatedAt': FieldValue.serverTimestamp(),
                 };
 
@@ -144,41 +133,136 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                     ...studentData,
                     'createdAt': FieldValue.serverTimestamp(),
                   });
-
-                  await _notificationService.addNotification(
-                    title: 'New Student Registered',
-                    message: '$name has been added to the system.',
-                    type: 'student',
-                  );
                 } else {
                   await _students.doc(student.id).update(studentData);
                 }
 
-                if (!mounted) return;
+                if (!dialogContext.mounted) return;
 
                 Navigator.pop(dialogContext);
 
-                ScaffoldMessenger.of(context).showSnackBar(
+                if (!mounted) return;
+
+                ScaffoldMessenger.of(this.context).showSnackBar(
                   SnackBar(
                     content: Text(
                       student == null
-                          ? 'Student added successfully'
-                          : 'Student updated successfully',
+                          ? 'Student added successfully.'
+                          : 'Student updated successfully.',
                     ),
+                    backgroundColor: Colors.green,
                   ),
                 );
-              } catch (e) {
-                if (!mounted) return;
 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
+                if (student == null) {
+                  try {
+                    await _notificationService.addNotification(
+                      title: 'New Student Added',
+                      message: '$name ($rollNo) has been added.',
+                      type: 'student',
+                    );
+                  } catch (e) {
+                    debugPrint('Notification error: $e');
+                  }
+                }
+              } catch (e) {
+                if (!dialogContext.mounted) return;
+
+                setDialogState(() => isSaving = false);
+
+                ScaffoldMessenger.of(dialogContext).showSnackBar(
+                  SnackBar(
+                    content: Text('Error: $e'),
+                    backgroundColor: Colors.red,
+                  ),
                 );
               }
-            },
-            child: Text(student == null ? 'Add Student' : 'Save Changes'),
-          ),
-        ],
-      ),
+            }
+
+            return AlertDialog(
+              title: Text(
+                student == null ? 'Add New Student' : 'Edit Student',
+              ),
+              content: SizedBox(
+                width: 420,
+                child: SingleChildScrollView(
+                  child: Form(
+                    key: formKey,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _buildField(
+                          nameController,
+                          'Student Name',
+                          Icons.person_outline,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildField(
+                          rollController,
+                          'Roll Number',
+                          Icons.badge_outlined,
+                          prefixText: 'PSMS-',
+                          keyboardType: TextInputType.number,
+                          validator: (value) {
+                            if (value == null || value.trim().isEmpty) {
+                              return 'Roll number is required';
+                            }
+
+                            if (!RegExp(r'^\d{3,}$').hasMatch(value.trim())) {
+                              return 'Enter at least 3 digits';
+                            }
+
+                            return null;
+                          },
+                        ),
+                        const SizedBox(height: 14),
+                        _buildField(
+                          emailController,
+                          'Email Address',
+                          Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildField(
+                          courseController,
+                          'Course',
+                          Icons.menu_book_outlined,
+                        ),
+                        const SizedBox(height: 14),
+                        _buildField(
+                          phoneController,
+                          'Phone Number',
+                          Icons.phone_outlined,
+                          keyboardType: TextInputType.phone,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed:
+                      isSaving ? null : () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: isSaving ? null : saveStudent,
+                  child: isSaving
+                      ? const SizedBox(
+                          height: 18,
+                          width: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : Text(student == null ? 'Add Student' : 'Update'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
     nameController.dispose();
@@ -188,204 +272,257 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     phoneController.dispose();
   }
 
-  Widget _field(TextEditingController controller, String label) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          labelText: label,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
+  Widget _buildField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    String? prefixText,
+    TextInputType keyboardType = TextInputType.text,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      validator: validator ??
+          (value) {
+            if (value == null || value.trim().isEmpty) {
+              return '$label is required';
+            }
+            return null;
+          },
+      decoration: InputDecoration(
+        labelText: label,
+        prefixText: prefixText,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
         ),
       ),
     );
   }
 
-  Future<void> deleteStudent(Student student) async {
+  Future<void> _deleteStudent(Student student) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Student'),
+        content: Text('Are you sure you want to delete ${student.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
       await _students.doc(student.id).delete();
 
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Student deleted successfully')),
+        const SnackBar(
+          content: Text('Student deleted successfully.'),
+          backgroundColor: Colors.green,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(content: Text('Error deleting student: $e')),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Student Management',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => showStudentForm(),
-        backgroundColor: AppTheme.primary,
-        foregroundColor: AppTheme.navy,
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Add Student'),
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: TextField(
-              controller: searchController,
-              onChanged: (value) {
-                setState(() => searchQuery = value.toLowerCase().trim());
-              },
-              decoration: InputDecoration(
-                hintText: 'Search by name or roll number',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  onPressed: () {
-                    searchController.clear();
-                    setState(() => searchQuery = '');
-                  },
-                  icon: const Icon(Icons.close),
-                ),
-              ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                const Text(
-                  'All Students',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.navy,
-                  ),
-                ),
-                const Spacer(),
-                StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-                  stream: _students.snapshots(),
-                  builder: (context, snapshot) {
-                    final count = snapshot.data?.docs.length ?? 0;
+    return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+      stream: _students.orderBy('createdAt', descending: true).snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Text('Something went wrong: ${snapshot.error}'),
+          );
+        }
 
-                    return Text(
-                      '$count Students',
-                      style: const TextStyle(color: Colors.black54),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          Expanded(
-            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: _students.snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return const Center(
-                    child: Text('Unable to load students'),
-                  );
-                }
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
 
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
+        final students = snapshot.data!.docs
+            .map((doc) => Student.fromFirestore(doc))
+            .where((student) {
+          final query = _searchQuery.toLowerCase();
 
-                final students = snapshot.data!.docs
-                    .map(
-                      (doc) => Student.fromFirestore(doc.id, doc.data()),
-                    )
-                    .where((student) {
-                      return student.name.toLowerCase().contains(searchQuery) ||
-                          student.rollNo.toLowerCase().contains(searchQuery);
-                    })
-                    .toList();
+          return student.name.toLowerCase().contains(query) ||
+              student.rollNo.toLowerCase().contains(query) ||
+              student.course.toLowerCase().contains(query);
+        }).toList();
 
-                if (students.isEmpty) {
-                  return const Center(child: Text('No students found'));
-                }
+        final totalStudents = snapshot.data!.docs.length;
 
-                return ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
-                  itemCount: students.length,
-                  itemBuilder: (context, index) {
-                    final student = students[index];
-
-                    return Card(
-                      color: Colors.white,
-                      elevation: 0,
-                      margin: const EdgeInsets.only(bottom: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Student Management',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.all(12),
-                        leading: CircleAvatar(
-                          backgroundColor: const Color(0xFFFFE9A8),
-                          child: Text(
-                            student.name.isNotEmpty
-                                ? student.name[0].toUpperCase()
-                                : '?',
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _showStudentDialog(),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Add Student'),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(18),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.groups_outlined,
+                        size: 35,
+                        color: Colors.blue,
+                      ),
+                      const SizedBox(width: 14),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Total Students'),
+                          Text(
+                            '$totalStudents',
                             style: const TextStyle(
-                              color: AppTheme.navy,
+                              fontSize: 24,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
-                        ),
-                        title: Text(
-                          student.name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: AppTheme.navy,
-                          ),
-                        ),
-                        subtitle: Padding(
-                          padding: const EdgeInsets.only(top: 5),
-                          child: Text(
-                            '${student.rollNo}\n${student.course}',
-                          ),
-                        ),
-                        isThreeLine: true,
-                        trailing: PopupMenuButton<String>(
-                          onSelected: (value) {
-                            if (value == 'edit') {
-                              showStudentForm(student: student);
-                            } else if (value == 'delete') {
-                              deleteStudent(student);
-                            }
-                          },
-                          itemBuilder: (context) => const [
-                            PopupMenuItem(
-                              value: 'edit',
-                              child: Text('Edit'),
-                            ),
-                            PopupMenuItem(
-                              value: 'delete',
-                              child: Text('Delete'),
-                            ),
-                          ],
-                        ),
+                        ],
                       ),
-                    );
-                  },
-                );
-              },
-            ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              TextField(
+                controller: _searchController,
+                onChanged: (value) {
+                  setState(() => _searchQuery = value.trim());
+                },
+                decoration: InputDecoration(
+                  hintText: 'Search by name, roll number or course...',
+                  prefixIcon: const Icon(Icons.search),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  suffixIcon: _searchQuery.isNotEmpty
+                      ? IconButton(
+                          onPressed: () {
+                            _searchController.clear();
+                            setState(() => _searchQuery = '');
+                          },
+                          icon: const Icon(Icons.close),
+                        )
+                      : null,
+                ),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: students.isEmpty
+                    ? const Center(
+                        child: Text('No students found.'),
+                      )
+                    : ListView.builder(
+                        itemCount: students.length,
+                        itemBuilder: (context, index) {
+                          final student = students[index];
+
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            child: ListTile(
+                              leading: CircleAvatar(
+                                child: Text(
+                                  student.name.isNotEmpty
+                                      ? student.name[0].toUpperCase()
+                                      : '?',
+                                ),
+                              ),
+                              title: Text(
+                                student.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              subtitle: Text(
+                                '${student.rollNo} • ${student.course}\n'
+                                '${student.email}',
+                              ),
+                              isThreeLine: true,
+                              trailing: PopupMenuButton<String>(
+                                onSelected: (value) {
+                                  if (value == 'edit') {
+                                    _showStudentDialog(student: student);
+                                  } else if (value == 'delete') {
+                                    _deleteStudent(student);
+                                  }
+                                },
+                                itemBuilder: (context) => const [
+                                  PopupMenuItem(
+                                    value: 'edit',
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.edit_outlined),
+                                        SizedBox(width: 8),
+                                        Text('Edit'),
+                                      ],
+                                    ),
+                                  ),
+                                  PopupMenuItem(
+                                    value: 'delete',
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.delete_outline,
+                                          color: Colors.red,
+                                        ),
+                                        SizedBox(width: 8),
+                                        Text('Delete'),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

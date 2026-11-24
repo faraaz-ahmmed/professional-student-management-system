@@ -1,9 +1,18 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
 
 class ReportsScreen extends StatelessWidget {
   const ReportsScreen({super.key});
+
+  FirebaseFirestore get firestore => FirebaseFirestore.instance;
+
+  String get todayKey {
+    final now = DateTime.now();
+    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -19,197 +28,300 @@ class ReportsScreen extends StatelessWidget {
           final width = constraints.maxWidth;
           final columns = width >= 900 ? 4 : width >= 600 ? 2 : 1;
 
-          return SingleChildScrollView(
-            padding: EdgeInsets.all(width < 600 ? 16 : 24),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 1200),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Institution Reports',
-                      style: TextStyle(
-                        fontSize: 23,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.navy,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    const Text(
-                      'Overview of your institution performance.',
-                      style: TextStyle(color: Colors.black54),
-                    ),
-                    const SizedBox(height: 24),
+          return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+            stream: firestore.collection('students').snapshots(),
+            builder: (context, studentSnapshot) {
+              return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                stream: firestore.collection('courses').snapshots(),
+                builder: (context, courseSnapshot) {
+                  return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                    stream: firestore
+                        .collection('attendance')
+                        .where('dateKey', isEqualTo: todayKey)
+                        .snapshots(),
+                    builder: (context, attendanceSnapshot) {
+                      if (studentSnapshot.hasError ||
+                          courseSnapshot.hasError ||
+                          attendanceSnapshot.hasError) {
+                        return const Center(
+                          child: Text('Unable to load reports.'),
+                        );
+                      }
 
-                    GridView.count(
-                      crossAxisCount: columns,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: width < 600 ? 2.1 : 1.5,
-                      children: const [
-                        _ReportCard(
-                          title: 'Total Students',
-                          value: '250',
-                          icon: Icons.people_outline,
-                          color: Color(0xFF2563EB),
-                        ),
-                        _ReportCard(
-                          title: 'Present Today',
-                          value: '230',
-                          icon: Icons.check_circle_outline,
-                          color: Color(0xFF16A34A),
-                        ),
-                        _ReportCard(
-                          title: 'Absent Today',
-                          value: '20',
-                          icon: Icons.cancel_outlined,
-                          color: Color(0xFFDC2626),
-                        ),
-                        _ReportCard(
-                          title: 'Attendance Rate',
-                          value: '92%',
-                          icon: Icons.trending_up,
-                          color: Color(0xFF9333EA),
-                        ),
-                      ],
-                    ),
+                      if (!studentSnapshot.hasData ||
+                          !courseSnapshot.hasData ||
+                          !attendanceSnapshot.hasData) {
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      }
 
-                    const SizedBox(height: 28),
+                      final totalStudents =
+                          studentSnapshot.data!.docs.length;
+                      final courses = courseSnapshot.data!.docs;
+                      final attendance = attendanceSnapshot.data!.docs;
 
-                    const Text(
-                      'Attendance Overview',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.navy,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
+                      int present = 0;
+                      int absent = 0;
+                      int late = 0;
 
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                'Overall Attendance',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w600,
+                      for (final doc in attendance) {
+                        final status =
+                            doc.data()['status']?.toString().toLowerCase();
+
+                        if (status == 'present') {
+                          present++;
+                        } else if (status == 'absent') {
+                          absent++;
+                        } else if (status == 'late') {
+                          late++;
+                        }
+                      }
+
+                      final marked = present + absent + late;
+                      final attendanceRate =
+                          marked == 0 ? 0.0 : (present + late) / marked;
+
+                      final rateText =
+                          '${(attendanceRate * 100).toStringAsFixed(1)}%';
+
+                      return SingleChildScrollView(
+                        padding: EdgeInsets.all(width < 600 ? 16 : 24),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints:
+                                const BoxConstraints(maxWidth: 1200),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Institution Reports',
+                                  style: TextStyle(
+                                    fontSize: 23,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.navy,
+                                  ),
                                 ),
-                              ),
-                              Text(
-                                '92%',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppTheme.navy,
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'Overview of your institution performance.',
+                                  style: TextStyle(color: Colors.black54),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(20),
-                            child: const LinearProgressIndicator(
-                              value: 0.92,
-                              minHeight: 12,
-                              backgroundColor: Color(0xFFFFE9A8),
-                              color: Color(0xFF16A34A),
+                                const SizedBox(height: 24),
+
+                                GridView.count(
+                                  crossAxisCount: columns,
+                                  shrinkWrap: true,
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  crossAxisSpacing: 14,
+                                  mainAxisSpacing: 14,
+                                  childAspectRatio:
+                                      width < 600 ? 2.1 : 1.5,
+                                  children: [
+                                    _ReportCard(
+                                      title: 'Total Students',
+                                      value: '$totalStudents',
+                                      icon: Icons.people_outline,
+                                      color: const Color(0xFF2563EB),
+                                    ),
+                                    _ReportCard(
+                                      title: 'Present Today',
+                                      value: '$present',
+                                      icon: Icons.check_circle_outline,
+                                      color: const Color(0xFF16A34A),
+                                    ),
+                                    _ReportCard(
+                                      title: 'Absent Today',
+                                      value: '$absent',
+                                      icon: Icons.cancel_outlined,
+                                      color: const Color(0xFFDC2626),
+                                    ),
+                                    _ReportCard(
+                                      title: 'Attendance Rate',
+                                      value: rateText,
+                                      icon: Icons.trending_up,
+                                      color: const Color(0xFF9333EA),
+                                    ),
+                                  ],
+                                ),
+
+                                const SizedBox(height: 28),
+
+                                const Text(
+                                  'Attendance Overview',
+                                  style: TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.navy,
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(20),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(18),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          const Text(
+                                            'Overall Attendance Today',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          Text(
+                                            rateText,
+                                            style: const TextStyle(
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.bold,
+                                              color: AppTheme.navy,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(20),
+                                        child: LinearProgressIndicator(
+                                          value: attendanceRate,
+                                          minHeight: 12,
+                                          backgroundColor:
+                                              const Color(0xFFFFE9A8),
+                                          color: const Color(0xFF16A34A),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 18),
+                                      Wrap(
+                                        spacing: 20,
+                                        runSpacing: 12,
+                                        children: [
+                                          _Legend(
+                                            color: const Color(0xFF16A34A),
+                                            label: 'Present: $present',
+                                          ),
+                                          _Legend(
+                                            color: const Color(0xFFDC2626),
+                                            label: 'Absent: $absent',
+                                          ),
+                                          _Legend(
+                                            color: const Color(0xFFF59E0B),
+                                            label: 'Late: $late',
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'Marked: $marked / $totalStudents students',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.black54,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+
+                                const SizedBox(height: 28),
+
+                                Row(
+                                  children: [
+                                    const Text(
+                                      'Course Summary',
+                                      style: TextStyle(
+                                        fontSize: 19,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.navy,
+                                      ),
+                                    ),
+                                    const Spacer(),
+                                    Text(
+                                      '${courses.length} Courses',
+                                      style: const TextStyle(
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+
+                                if (courses.isEmpty)
+                                  const Center(
+                                    child: Padding(
+                                      padding: EdgeInsets.all(24),
+                                      child: Text('No courses available'),
+                                    ),
+                                  )
+                                else
+                                  ...courses.map((doc) {
+                                    final course = doc.data();
+
+                                    return _CourseReport(
+                                      name: course['name']?.toString() ??
+                                          'Unnamed Course',
+                                      code:
+                                          course['code']?.toString() ?? '',
+                                      instructor:
+                                          course['instructor']?.toString() ??
+                                              '',
+                                      duration:
+                                          course['duration']?.toString() ??
+                                              '',
+                                    );
+                                  }),
+
+                                const SizedBox(height: 24),
+
+                                Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFE9A8),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Icon(
+                                        Icons.info_outline,
+                                        color: AppTheme.navy,
+                                      ),
+                                      SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          'Reports are connected to your live '
+                                          'Firestore student, course and '
+                                          'attendance records.',
+                                          style: TextStyle(
+                                            color: AppTheme.navy,
+                                            height: 1.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 18),
-                          const Wrap(
-                            spacing: 20,
-                            runSpacing: 12,
-                            children: [
-                              _Legend(
-                                color: Color(0xFF16A34A),
-                                label: 'Present: 230',
-                              ),
-                              _Legend(
-                                color: Color(0xFFDC2626),
-                                label: 'Absent: 20',
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    const SizedBox(height: 28),
-
-                    const Text(
-                      'Course Summary',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.navy,
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    const _CourseReport(
-                      name: 'Computer Science',
-                      students: '85 Students',
-                      progress: 0.85,
-                    ),
-                    const _CourseReport(
-                      name: 'Software Engineering',
-                      students: '70 Students',
-                      progress: 0.70,
-                    ),
-                    const _CourseReport(
-                      name: 'Information Technology',
-                      students: '95 Students',
-                      progress: 0.95,
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFE9A8),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: AppTheme.navy,
-                          ),
-                          SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'These reports currently use sample data. '
-                              'They will be connected to actual student, '
-                              'course and attendance records later.',
-                              style: TextStyle(
-                                color: AppTheme.navy,
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+                        ),
+                      );
+                    },
+                  );
+                },
+              );
+            },
           );
         },
       ),
@@ -305,13 +417,15 @@ class _Legend extends StatelessWidget {
 
 class _CourseReport extends StatelessWidget {
   final String name;
-  final String students;
-  final double progress;
+  final String code;
+  final String instructor;
+  final String duration;
 
   const _CourseReport({
     required this.name,
-    required this.students,
-    required this.progress,
+    required this.code,
+    required this.instructor,
+    required this.duration,
   });
 
   @override
@@ -326,34 +440,35 @@ class _CourseReport extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: AppTheme.navy,
-                  ),
-                ),
-              ),
-              Text(
-                students,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                ),
-              ),
-            ],
+          Text(
+            name,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              color: AppTheme.navy,
+            ),
           ),
-          const SizedBox(height: 12),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(20),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 8,
-              backgroundColor: const Color(0xFFFFE9A8),
-              color: AppTheme.primary,
+          const SizedBox(height: 8),
+          Text(
+            'Code: $code',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Instructor: $instructor',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Duration: $duration',
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
             ),
           ),
         ],

@@ -113,7 +113,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _notificationButton() {
     return ValueListenableBuilder<int>(
       valueListenable: NotificationBadge.unreadCount,
-      builder: (context, count, child) {
+      builder: (context, unreadCount, child) {
         return IconButton(
           tooltip: 'Notifications',
           onPressed: () => selectPage(5),
@@ -121,7 +121,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             clipBehavior: Clip.none,
             children: [
               const Icon(Icons.notifications_none_rounded, size: 27),
-              if (count > 0)
+              if (unreadCount > 0)
                 Positioned(
                   right: -7,
                   top: -6,
@@ -140,7 +140,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                     alignment: Alignment.center,
                     child: Text(
-                      count > 99 ? '99+' : '$count',
+                      unreadCount > 99 ? '99+' : '$unreadCount',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -210,42 +210,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: EdgeInsets.zero,
                 itemCount: titles.length,
                 itemBuilder: (context, index) {
-                  return ListTile(
-                    selected: selectedIndex == index,
-                    selectedTileColor: Colors.white.withValues(alpha: 0.12),
-                    leading: Icon(
-                      icons[index],
-                      color: selectedIndex == index
-                          ? AppTheme.primary
-                          : Colors.white70,
-                    ),
-                    title: Text(
-                      titles[index],
-                      style: TextStyle(
+                  return Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      selected: selectedIndex == index,
+                      selectedTileColor: Colors.white.withValues(alpha: 0.12),
+                      leading: Icon(
+                        icons[index],
                         color: selectedIndex == index
                             ? AppTheme.primary
-                            : Colors.white,
-                        fontWeight: selectedIndex == index
-                            ? FontWeight.bold
-                            : FontWeight.normal,
+                            : Colors.white70,
                       ),
+                      title: Text(
+                        titles[index],
+                        style: TextStyle(
+                          color: selectedIndex == index
+                              ? AppTheme.primary
+                              : Colors.white,
+                          fontWeight: selectedIndex == index
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                      onTap: () => selectPage(index),
                     ),
-                    onTap: () => selectPage(index),
                   );
                 },
               ),
             ),
             const Divider(color: Colors.white24),
-            ListTile(
-              leading: const Icon(
-                Icons.logout_rounded,
-                color: Colors.white70,
+            Material(
+              color: Colors.transparent,
+              child: ListTile(
+                leading: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.white70,
+                ),
+                title: const Text(
+                  'Logout',
+                  style: TextStyle(color: Colors.white),
+                ),
+                onTap: _logout,
               ),
-              title: const Text(
-                'Logout',
-                style: TextStyle(color: Colors.white),
-              ),
-              onTap: _logout,
             ),
           ],
         ),
@@ -295,22 +301,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 padding: EdgeInsets.zero,
                 itemCount: titles.length,
                 itemBuilder: (context, index) {
-                  return ListTile(
-                    leading: Icon(icons[index]),
-                    title: Text(titles[index]),
-                    selected: selectedIndex == index,
-                    onTap: () {
-                      selectPage(index);
-                      Navigator.pop(context);
-                    },
+                  return Material(
+                    color: Colors.transparent,
+                    child: ListTile(
+                      leading: Icon(icons[index]),
+                      title: Text(titles[index]),
+                      selected: selectedIndex == index,
+                      onTap: () {
+                        selectPage(index);
+                        Navigator.pop(context);
+                      },
+                    ),
                   );
                 },
               ),
             ),
-            ListTile(
-              leading: const Icon(Icons.logout_rounded),
-              title: const Text('Logout'),
-              onTap: _logout,
+            Material(
+              color: Colors.transparent,
+              child: ListTile(
+                leading: const Icon(Icons.logout_rounded),
+                title: const Text('Logout'),
+                onTap: _logout,
+              ),
             ),
           ],
         ),
@@ -497,9 +509,7 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-      stream: FirebaseFirestore.instance
-          .collection(collection)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection(collection).snapshots(),
       builder: (context, snapshot) {
         String value = '...';
 
@@ -576,9 +586,7 @@ class _RecentStudents extends StatelessWidget {
             final data = student.data();
             final name = data['name']?.toString() ?? 'Unknown Student';
             final rollNo = data['rollNo']?.toString() ?? 'No Roll Number';
-            final initials = name.isNotEmpty
-                ? name[0].toUpperCase()
-                : '?';
+            final initials = name.isNotEmpty ? name[0].toUpperCase() : '?';
 
             return _StudentTile(
               name: name,

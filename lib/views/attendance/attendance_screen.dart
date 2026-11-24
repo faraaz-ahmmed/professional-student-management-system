@@ -1,5 +1,7 @@
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
 
 class AttendanceScreen extends StatefulWidget {
@@ -11,25 +13,12 @@ class AttendanceScreen extends StatefulWidget {
 
 class _AttendanceScreenState extends State<AttendanceScreen> {
   DateTime selectedDate = DateTime.now();
+  final Set<String> savingStudents = {};
 
-  final List<Map<String, String>> students = [
-    {'name': 'Ali Ahmad', 'rollNo': 'PSMS-001'},
-    {'name': 'Ahmed Khan', 'rollNo': 'PSMS-002'},
-    {'name': 'Sara Malik', 'rollNo': 'PSMS-003'},
-    {'name': 'Usman Ali', 'rollNo': 'PSMS-004'},
-    {'name': 'Ayesha Noor', 'rollNo': 'PSMS-005'},
-  ];
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final Map<String, String> attendance = {};
-
-  int get presentCount =>
-      attendance.values.where((status) => status == 'Present').length;
-
-  int get absentCount =>
-      attendance.values.where((status) => status == 'Absent').length;
-
-  int get lateCount =>
-      attendance.values.where((status) => status == 'Late').length;
+  String get dateKey =>
+      '${selectedDate.year}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.day.toString().padLeft(2, '0')}';
 
   Future<void> pickDate() async {
     final date = await showDatePicker(
@@ -40,17 +29,48 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
     );
 
     if (date != null) {
-      setState(() {
-        selectedDate = date;
-        attendance.clear();
-      });
+      setState(() => selectedDate = date);
     }
   }
 
-  void markAttendance(String rollNo, String status) {
-    setState(() {
-      attendance[rollNo] = status;
-    });
+  Future<void> markAttendance(
+    String studentId,
+    String name,
+    String rollNo,
+    String status,
+  ) async {
+    setState(() => savingStudents.add(studentId));
+
+    try {
+      await _firestore.collection('attendance').doc('${dateKey}_$studentId').set({
+        'studentId': studentId,
+        'studentName': name,
+        'rollNo': rollNo,
+        'status': status,
+        'dateKey': dateKey,
+        'date': Timestamp.fromDate(selectedDate),
+        'updatedAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$name marked $status'),
+            duration: const Duration(seconds: 1),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to save attendance: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => savingStudents.remove(studentId));
+      }
+    }
   }
 
   Color statusColor(String status) {
@@ -120,154 +140,247 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
               ),
             ),
           ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _SummaryCard(
-                    title: 'Present',
-                    count: presentCount,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _SummaryCard(
-                    title: 'Absent',
-                    count: absentCount,
-                    color: Colors.red,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _SummaryCard(
-                    title: 'Late',
-                    count: lateCount,
-                    color: Colors.orange,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
-            child: Row(
-              children: [
-                const Text(
-                  'Student Attendance',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.navy,
-                  ),
-                ),
-                const Spacer(),
-                Text(
-                  '${attendance.length}/${students.length} Marked',
-                  style: const TextStyle(color: Colors.black54),
-                ),
-              ],
-            ),
-          ),
-
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-              itemCount: students.length,
-              itemBuilder: (context, index) {
-                final student = students[index];
-                final rollNo = student['rollNo']!;
-                final status = attendance[rollNo];
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _firestore.collection('students').snapshots(),
+              builder: (context, studentSnapshot) {
+                if (studentSnapshot.hasError) {
+                  return const Center(child: Text('Unable to load students.'));
+                }
 
-                return Card(
-                  color: Colors.white,
-                  elevation: 0,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                if (!studentSnapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                final students = studentSnapshot.data!.docs;
+
+                if (students.isEmpty) {
+                  return const Center(child: Text('No students found.'));
+                }
+
+                return StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+                  stream: _firestore
+                      .collection('attendance')
+                      .where('dateKey', isEqualTo: dateKey)
+                      .snapshots(),
+                  builder: (context, attendanceSnapshot) {
+                    if (attendanceSnapshot.hasError) {
+                      return const Center(
+                        child: Text('Unable to load attendance.'),
+                      );
+                    }
+
+                    if (!attendanceSnapshot.hasData) {
+                      return const Center(
+                        child: CircularProgressIndicator(),
+                      );
+                    }
+
+                    final records = {
+                      for (final doc in attendanceSnapshot.data!.docs)
+                        doc.data()['studentId']?.toString() ?? '': doc.data(),
+                    };
+
+                    int count(String status) => records.values
+                        .where((record) => record['status'] == status)
+                        .length;
+
+                    return Column(
                       children: [
-                        Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: const Color(0xFFFFE9A8),
-                              child: Text(
-                                student['name']![0],
-                                style: const TextStyle(
-                                  color: AppTheme.navy,
-                                  fontWeight: FontWeight.bold,
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _SummaryCard(
+                                  title: 'Present',
+                                  count: count('Present'),
+                                  color: Colors.green,
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    student['name']!,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: AppTheme.navy,
-                                    ),
-                                  ),
-                                  Text(
-                                    rollNo,
-                                    style: const TextStyle(
-                                      color: Colors.black54,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (status != null)
-                              Text(
-                                status,
-                                style: TextStyle(
-                                  color: statusColor(status),
-                                  fontWeight: FontWeight.bold,
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _SummaryCard(
+                                  title: 'Absent',
+                                  count: count('Absent'),
+                                  color: Colors.red,
                                 ),
                               ),
-                          ],
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _SummaryCard(
+                                  title: 'Late',
+                                  count: count('Late'),
+                                  color: Colors.orange,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 14),
-                        Row(
-                          children: [
-                            _StatusButton(
-                              title: 'Present',
-                              color: Colors.green,
-                              selected: status == 'Present',
-                              onTap: () =>
-                                  markAttendance(rollNo, 'Present'),
-                            ),
-                            const SizedBox(width: 8),
-                            _StatusButton(
-                              title: 'Absent',
-                              color: Colors.red,
-                              selected: status == 'Absent',
-                              onTap: () =>
-                                  markAttendance(rollNo, 'Absent'),
-                            ),
-                            const SizedBox(width: 8),
-                            _StatusButton(
-                              title: 'Late',
-                              color: Colors.orange,
-                              selected: status == 'Late',
-                              onTap: () => markAttendance(rollNo, 'Late'),
-                            ),
-                          ],
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+                          child: Row(
+                            children: [
+                              const Text(
+                                'Student Attendance',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.navy,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${records.length}/${students.length} Marked',
+                                style: const TextStyle(
+                                  color: Colors.black54,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          child: ListView.builder(
+                            padding: const EdgeInsets.fromLTRB(16, 0, 16, 20),
+                            itemCount: students.length,
+                            itemBuilder: (context, index) {
+                              final student = students[index];
+                              final data = student.data();
+
+                              final name =
+                                  data['name']?.toString() ?? 'Unknown';
+                              final rollNo =
+                                  data['rollNo']?.toString() ?? 'No Roll No';
+                              final status =
+                                  records[student.id]?['status']?.toString();
+                              final isSaving =
+                                  savingStudents.contains(student.id);
+
+                              return Card(
+                                color: Colors.white,
+                                elevation: 0,
+                                margin: const EdgeInsets.only(bottom: 12),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(14),
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          CircleAvatar(
+                                            backgroundColor:
+                                                const Color(0xFFFFE9A8),
+                                            child: Text(
+                                              name.isNotEmpty
+                                                  ? name[0].toUpperCase()
+                                                  : '?',
+                                              style: const TextStyle(
+                                                color: AppTheme.navy,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  name,
+                                                  style: const TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppTheme.navy,
+                                                  ),
+                                                ),
+                                                Text(
+                                                  rollNo,
+                                                  style: const TextStyle(
+                                                    color: Colors.black54,
+                                                    fontSize: 12,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          if (isSaving)
+                                            const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                              ),
+                                            )
+                                          else if (status != null)
+                                            Text(
+                                              status,
+                                              style: TextStyle(
+                                                color: statusColor(status),
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 14),
+                                      Row(
+                                        children: [
+                                          _StatusButton(
+                                            title: 'Present',
+                                            color: Colors.green,
+                                            selected: status == 'Present',
+                                            onTap: isSaving
+                                                ? null
+                                                : () => markAttendance(
+                                                      student.id,
+                                                      name,
+                                                      rollNo,
+                                                      'Present',
+                                                    ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _StatusButton(
+                                            title: 'Absent',
+                                            color: Colors.red,
+                                            selected: status == 'Absent',
+                                            onTap: isSaving
+                                                ? null
+                                                : () => markAttendance(
+                                                      student.id,
+                                                      name,
+                                                      rollNo,
+                                                      'Absent',
+                                                    ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          _StatusButton(
+                                            title: 'Late',
+                                            color: Colors.orange,
+                                            selected: status == 'Late',
+                                            onTap: isSaving
+                                                ? null
+                                                : () => markAttendance(
+                                                      student.id,
+                                                      name,
+                                                      rollNo,
+                                                      'Late',
+                                                    ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
                         ),
                       ],
-                    ),
-                  ),
+                    );
+                  },
                 );
               },
             ),
@@ -325,7 +438,7 @@ class _StatusButton extends StatelessWidget {
   final String title;
   final Color color;
   final bool selected;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _StatusButton({
     required this.title,
