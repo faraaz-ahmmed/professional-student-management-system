@@ -22,23 +22,27 @@ class _TeachersScreenState extends State<TeachersScreen> {
   CollectionReference<Map<String, dynamic>> get _teachers =>
       _firestore.collection('teachers');
 
+  CollectionReference<Map<String, dynamic>> get _courses =>
+      _firestore.collection('courses');
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
 
-  Future<void> _showTeacherForm({DocumentSnapshot? teacher}) async {
-    final nameController =
-        TextEditingController(text: teacher?['name'] ?? '');
-    final emailController =
-        TextEditingController(text: teacher?['email'] ?? '');
-    final phoneController =
-        TextEditingController(text: teacher?['phone'] ?? '');
+  Future<void> _showTeacherForm({
+    DocumentSnapshot<Map<String, dynamic>>? teacher,
+  }) async {
+    final data = teacher?.data() ?? {};
+
+    final nameController = TextEditingController(text: data['name'] ?? '');
+    final emailController = TextEditingController(text: data['email'] ?? '');
+    final phoneController = TextEditingController(text: data['phone'] ?? '');
     final subjectController =
-        TextEditingController(text: teacher?['subject'] ?? '');
+        TextEditingController(text: data['subject'] ?? '');
     final qualificationController =
-        TextEditingController(text: teacher?['qualification'] ?? '');
+        TextEditingController(text: data['qualification'] ?? '');
 
     final formKey = GlobalKey<FormState>();
     final messenger = ScaffoldMessenger.of(context);
@@ -66,9 +70,8 @@ class _TeachersScreenState extends State<TeachersScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: saving
-                  ? null
-                  : () => Navigator.pop(dialogContext),
+              onPressed:
+                  saving ? null : () => Navigator.pop(dialogContext),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -84,7 +87,7 @@ class _TeachersScreenState extends State<TeachersScreen> {
                       setDialogState(() => saving = true);
 
                       try {
-                        final data = {
+                        final teacherData = {
                           'name': nameController.text.trim(),
                           'email': emailController.text.trim(),
                           'phone': phoneController.text.trim(),
@@ -96,7 +99,9 @@ class _TeachersScreenState extends State<TeachersScreen> {
 
                         if (teacher == null) {
                           await _teachers.add({
-                            ...data,
+                            ...teacherData,
+                            'courseIds': [],
+                            'courseNames': [],
                             'createdAt': FieldValue.serverTimestamp(),
                           });
 
@@ -107,7 +112,7 @@ class _TeachersScreenState extends State<TeachersScreen> {
                             type: 'teacher',
                           );
                         } else {
-                          await _teachers.doc(teacher.id).update(data);
+                          await _teachers.doc(teacher.id).update(teacherData);
                         }
 
                         if (!dialogContext.mounted) return;
@@ -150,6 +155,177 @@ class _TeachersScreenState extends State<TeachersScreen> {
     qualificationController.dispose();
   }
 
+  Future<void> _showTeacherDetails(
+    DocumentSnapshot<Map<String, dynamic>> teacher,
+  ) async {
+    final data = teacher.data() ?? {};
+    final courseNames = List<String>.from(data['courseNames'] ?? []);
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(data['name'] ?? 'Teacher Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detail('Email', data['email']),
+              _detail('Phone', data['phone']),
+              _detail('Subject', data['subject']),
+              _detail('Qualification', data['qualification']),
+              const Divider(height: 24),
+              const Text(
+                'Assigned Courses',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: navy,
+                ),
+              ),
+              const SizedBox(height: 8),
+              if (courseNames.isEmpty)
+                const Text('No courses assigned yet')
+              else
+                ...courseNames.map(
+                  (name) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.book, color: gold),
+                    title: Text(name),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detail(String label, dynamic value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text('$label: ${value ?? '-'}'),
+    );
+  }
+
+  Future<void> _assignCourses(
+    DocumentSnapshot<Map<String, dynamic>> teacher,
+  ) async {
+    final teacherData = teacher.data() ?? {};
+    final selectedCourses =
+        List<String>.from(teacherData['courseIds'] ?? []);
+
+    final messenger = ScaffoldMessenger.of(context);
+
+    final result = await showDialog<List<String>>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Assign Courses to ${teacherData['name'] ?? 'Teacher'}'),
+          content: SizedBox(
+            width: 400,
+            child: StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
+              stream: _courses.orderBy('name').snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Text('Error: ${snapshot.error}');
+                }
+
+                if (!snapshot.hasData) {
+                  return const Center(
+                    child: CircularProgressIndicator(),
+                  );
+                }
+
+                final courses = snapshot.data!.docs;
+
+                if (courses.isEmpty) {
+                  return const Text('No courses available. Add a course first.');
+                }
+
+                return SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: courses.map((course) {
+                      final data = course.data();
+                      final name = data['name'] ?? 'Unnamed Course';
+                      final code = data['code'] ?? '';
+
+                      return CheckboxListTile(
+                        value: selectedCourses.contains(course.id),
+                        activeColor: navy,
+                        title: Text(name),
+                        subtitle: Text(code),
+                        onChanged: (checked) {
+                          setDialogState(() {
+                            if (checked == true) {
+                              selectedCourses.add(course.id);
+                            } else {
+                              selectedCourses.remove(course.id);
+                            }
+                          });
+                        },
+                      );
+                    }).toList(),
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: navy,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () =>
+                  Navigator.pop(dialogContext, selectedCourses),
+              child: const Text('Save Assignment'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (result == null) return;
+
+    try {
+      final courseNames = <String>[];
+
+      for (final courseId in result) {
+        final course = await _courses.doc(courseId).get();
+        if (course.exists) {
+          courseNames.add(course.data()?['name'] ?? 'Unnamed Course');
+        }
+      }
+
+      await _teachers.doc(teacher.id).update({
+        'courseIds': result,
+        'courseNames': courseNames,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Courses assigned successfully')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Assignment error: $e')),
+      );
+    }
+  }
+
   Widget _field(TextEditingController controller, String label) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -178,7 +354,10 @@ class _TeachersScreenState extends State<TeachersScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -188,6 +367,7 @@ class _TeachersScreenState extends State<TeachersScreen> {
 
     try {
       await _teachers.doc(id).delete();
+
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Teacher deleted successfully')),
@@ -261,7 +441,9 @@ class _TeachersScreenState extends State<TeachersScreen> {
                   }
 
                   if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(),
+                    );
                   }
 
                   final teachers = snapshot.data!.docs.where((doc) {
@@ -270,6 +452,7 @@ class _TeachersScreenState extends State<TeachersScreen> {
                         (data['name'] ?? '').toString().toLowerCase();
                     final subject =
                         (data['subject'] ?? '').toString().toLowerCase();
+
                     return name.contains(searchQuery) ||
                         subject.contains(searchQuery);
                   }).toList();
@@ -283,6 +466,8 @@ class _TeachersScreenState extends State<TeachersScreen> {
                     itemBuilder: (context, index) {
                       final teacher = teachers[index];
                       final data = teacher.data();
+                      final courseCount =
+                          (data['courseIds'] as List?)?.length ?? 0;
 
                       return Card(
                         color: Colors.white,
@@ -299,18 +484,32 @@ class _TeachersScreenState extends State<TeachersScreen> {
                             ),
                           ),
                           subtitle: Text(
-                            '${data['subject'] ?? ''}\n${data['email'] ?? ''}',
+                            '${data['subject'] ?? ''}\n'
+                            '${data['email'] ?? ''}\n'
+                            '$courseCount assigned course(s)',
                           ),
                           isThreeLine: true,
                           trailing: PopupMenuButton<String>(
                             onSelected: (value) {
-                              if (value == 'edit') {
+                              if (value == 'details') {
+                                _showTeacherDetails(teacher);
+                              } else if (value == 'assign') {
+                                _assignCourses(teacher);
+                              } else if (value == 'edit') {
                                 _showTeacherForm(teacher: teacher);
                               } else if (value == 'delete') {
                                 _deleteTeacher(teacher.id);
                               }
                             },
                             itemBuilder: (context) => const [
+                              PopupMenuItem(
+                                value: 'details',
+                                child: Text('Teacher Details'),
+                              ),
+                              PopupMenuItem(
+                                value: 'assign',
+                                child: Text('Assign Courses'),
+                              ),
                               PopupMenuItem(
                                 value: 'edit',
                                 child: Text('Edit'),
