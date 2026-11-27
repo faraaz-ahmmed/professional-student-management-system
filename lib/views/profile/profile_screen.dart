@@ -1,6 +1,12 @@
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
+import '../../models/user_model.dart';
+import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
+import '../auth/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -10,20 +16,51 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String name = 'PSMS Admin';
-  String email = 'admin@psms.com';
-  String phone = '03001234567';
-  String role = 'Administrator';
+  final UserService _userService = UserService();
+  final AuthService _authService = AuthService();
+
+  UserModel? user;
+  bool isLoading = true;
+  bool isSaving = false;
   bool notificationsEnabled = true;
 
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final currentUser = _authService.currentUser;
+
+      if (currentUser == null) return;
+
+      final profile = await _userService.getUser(currentUser.uid);
+
+      if (!mounted) return;
+
+      setState(() {
+        user = profile;
+        isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() => isLoading = false);
+      _showMessage('Unable to load profile: $e');
+    }
+  }
+
   Future<void> _editProfile() async {
-    final nameController = TextEditingController(text: name);
-    final emailController = TextEditingController(text: email);
-    final phoneController = TextEditingController(text: phone);
+    if (user == null) return;
+
+    final nameController = TextEditingController(text: user!.name);
+    final phoneController = TextEditingController(text: user!.phone);
 
     final result = await showDialog<bool>(
       context: context,
-      builder: (context) {
+      builder: (dialogContext) {
         return AlertDialog(
           title: const Text('Edit Profile'),
           content: SingleChildScrollView(
@@ -39,15 +76,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 12),
                 TextField(
-                  controller: emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    prefixIcon: Icon(Icons.email_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
                   controller: phoneController,
                   keyboardType: TextInputType.phone,
                   decoration: const InputDecoration(
@@ -55,16 +83,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     prefixIcon: Icon(Icons.phone_outlined),
                   ),
                 ),
+                const SizedBox(height: 12),
+                TextField(
+                  readOnly: true,
+                  controller: TextEditingController(text: user!.email),
+                  decoration: const InputDecoration(
+                    labelText: 'Email Address',
+                    prefixIcon: Icon(Icons.email_outlined),
+                    helperText: 'Email cannot be changed here',
+                  ),
+                ),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogContext, true),
               child: const Text('Save'),
             ),
           ],
@@ -73,20 +111,148 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (result == true) {
-      setState(() {
-        name = nameController.text.trim();
-        email = emailController.text.trim();
-        phone = phoneController.text.trim();
-      });
+      final name = nameController.text.trim();
+      final phone = phoneController.text.trim();
+
+      if (name.isEmpty) {
+        _showMessage('Name cannot be empty.');
+      } else {
+        await _saveProfile(name, phone);
+      }
     }
 
     nameController.dispose();
-    emailController.dispose();
     phoneController.dispose();
+  }
+
+  Future<void> _saveProfile(String name, String phone) async {
+    final currentUser = _authService.currentUser;
+
+    if (currentUser == null) return;
+
+    setState(() => isSaving = true);
+
+    try {
+      await _userService.updateProfile(
+        uid: currentUser.uid,
+        name: name,
+        phone: phone,
+      );
+
+      await _loadProfile();
+
+      if (!mounted) return;
+      _showMessage('Profile updated successfully.');
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('Profile update failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() => isSaving = false);
+      }
+    }
+  }
+
+  Future<void> _resetPassword() async {
+    final email = _authService.currentUser?.email;
+
+    if (email == null) {
+      _showMessage('Email address not found.');
+      return;
+    }
+
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+
+      if (!mounted) return;
+      _showMessage('Password reset link sent to $email');
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('Unable to send reset email: $e');
+    }
+  }
+
+  Future<void> _logout() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Logout'),
+        content: const Text('Are you sure you want to logout?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _authService.logout();
+
+      if (!mounted) return;
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      _showMessage('Logout failed: $e');
+    }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  String _roleName(String role) {
+    if (role == 'admin' || role == 'administrator') {
+      return 'Administrator';
+    }
+
+    return role.isEmpty ? 'Member' : role.toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (user == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Profile & Settings')),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Profile not found.'),
+              const SizedBox(height: 12),
+              FilledButton(
+                onPressed: _loadProfile,
+                child: const Text('Retry'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final profile = user!;
+    final role = _roleName(profile.role);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -119,8 +285,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             radius: 43,
                             backgroundColor: AppTheme.primary,
                             child: Text(
-                              name.isNotEmpty
-                                  ? name[0].toUpperCase()
+                              profile.name.isNotEmpty
+                                  ? profile.name[0].toUpperCase()
                                   : 'A',
                               style: const TextStyle(
                                 fontSize: 34,
@@ -131,7 +297,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 14),
                           Text(
-                            name,
+                            profile.name,
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 22,
@@ -145,14 +311,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 18),
                           OutlinedButton.icon(
-                            onPressed: _editProfile,
+                            onPressed: isSaving ? null : _editProfile,
                             icon: const Icon(Icons.edit_outlined),
                             label: const Text('Edit Profile'),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white,
-                              side: const BorderSide(color: Colors.white70),
+                              side: const BorderSide(
+                                color: Colors.white70,
+                              ),
                             ),
                           ),
+                          if (isSaving) ...[
+                            const SizedBox(height: 10),
+                            const CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -169,22 +343,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _InfoTile(
                       icon: Icons.person_outline,
                       title: 'Full Name',
-                      value: name,
+                      value: profile.name,
                     ),
                     _InfoTile(
                       icon: Icons.email_outlined,
                       title: 'Email Address',
-                      value: email,
+                      value: profile.email,
                     ),
                     _InfoTile(
                       icon: Icons.phone_outlined,
                       title: 'Phone Number',
-                      value: phone,
+                      value: profile.phone.isEmpty ? 'Not added' : profile.phone,
                     ),
                     _InfoTile(
                       icon: Icons.admin_panel_settings_outlined,
                       title: 'Account Role',
                       value: role,
+                    ),
+                    _InfoTile(
+                      icon: Icons.verified_user_outlined,
+                      title: 'Account Status',
+                      value: profile.accountStatus.toUpperCase(),
                     ),
                     const SizedBox(height: 26),
                     const Text(
@@ -239,16 +418,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _SettingsTile(
                       icon: Icons.security_outlined,
                       title: 'Account Security',
-                      subtitle: 'Password and account protection',
-                      onTap: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Password settings will be added with Firebase.',
-                            ),
-                          ),
-                        );
-                      },
+                      subtitle: 'Send password reset link to your email',
+                      onTap: _resetPassword,
+                    ),
+                    const SizedBox(height: 12),
+                    _SettingsTile(
+                      icon: Icons.logout_rounded,
+                      title: 'Logout',
+                      subtitle: 'Sign out from your account',
+                      onTap: _logout,
                     ),
                     const SizedBox(height: 20),
                     const Center(

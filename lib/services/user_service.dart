@@ -29,12 +29,20 @@ class UserService {
     });
   }
 
-  Future<void> updateAccountStatus(
-    String uid,
-    String status,
-  ) async {
+  Future<void> updateAccountStatus(String uid, String status) async {
     await _users.doc(uid).update({
       'accountStatus': status,
+    });
+  }
+
+  Future<void> updateProfile({
+    required String uid,
+    required String name,
+    required String phone,
+  }) async {
+    await _users.doc(uid).update({
+      'name': name,
+      'phone': phone,
     });
   }
 }
